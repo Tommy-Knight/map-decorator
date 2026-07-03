@@ -53,8 +53,7 @@ import net.runelite.client.ui.NavigationButton;
 @PluginDescriptor(
 	name = "Map Decorator",
 	description = "Place game objects on any tile, client-side only. Shift-right-click to place/remove.",
-	tags = {"map", "object", "place", "decorator", "editor"},
-	enabledByDefault = false
+	tags = {"map", "object", "place", "decorator", "editor"}
 )
 public class MapDecoratorPlugin extends Plugin
 {
