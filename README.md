@@ -26,4 +26,3 @@ Placements persist between sessions per region, and per player for the POH.
 ## Notes
 
 - Everything is cosmetic and local to your client — no game state is modified and no data leaves your machine.
-- Object IDs can be found on the [OSRS Wiki](https://oldschool.runescape.wiki/) or via RuneLite's developer tools.
