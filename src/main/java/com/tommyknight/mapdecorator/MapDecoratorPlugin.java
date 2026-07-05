@@ -200,12 +200,20 @@ public class MapDecoratorPlugin extends Plugin
 
 	private void applyToUiWidgets(boolean hidden, int opacity)
 	{
+		// Resizable classic: SIDE_CONTAINER is only the tab-content layer; SIDE_MENU is the whole sidebar
 		applyWidget(InterfaceID.ToplevelOsrsStretch.CHAT_CONTAINER, hidden, opacity);
+		applyWidget(InterfaceID.ToplevelOsrsStretch.SIDE_MENU, hidden, opacity);
 		applyWidget(InterfaceID.ToplevelOsrsStretch.SIDE_CONTAINER, hidden, opacity);
+		applyWidget(InterfaceID.ToplevelOsrsStretch.SIDE_TOP, hidden, opacity);
+		applyWidget(InterfaceID.ToplevelOsrsStretch.SIDE_BOTTOM, hidden, opacity);
+		applyWidget(InterfaceID.ToplevelOsrsStretch.SIDE_BACKGROUND, hidden, opacity);
 		applyWidget(InterfaceID.ToplevelOsrsStretch.MAP_CONTAINER, hidden, opacity);
 		applyWidget(InterfaceID.ToplevelOsrsStretch.ORBS, hidden, opacity);
+		// Resizable modern: static/movable layers hold the tab-stone bars
 		applyWidget(InterfaceID.ToplevelPreEoc.CHAT_CONTAINER, hidden, opacity);
 		applyWidget(InterfaceID.ToplevelPreEoc.SIDE_CONTAINER, hidden, opacity);
+		applyWidget(InterfaceID.ToplevelPreEoc.SIDE_STATIC_LAYER, hidden, opacity);
+		applyWidget(InterfaceID.ToplevelPreEoc.SIDE_MOVABLE_LAYER, hidden, opacity);
 		applyWidget(InterfaceID.ToplevelPreEoc.MAP_CONTAINER, hidden, opacity);
 		applyWidget(InterfaceID.ToplevelPreEoc.ORBS, hidden, opacity);
 		applyWidget(InterfaceID.Toplevel.CHAT_CONTAINER, hidden, opacity);
