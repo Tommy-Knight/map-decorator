@@ -1,28 +1,26 @@
 # Map Decorator
 
-Decorate the game world with any object, entirely client-side. Place, rotate and stack game objects on any tile, save your favourites, and set up clean screenshots — nothing is ever sent to the server, and only you can see your placements.
+A RuneLite plugin for creative players that enjoy world building.
 
-## Features
+Map Decorator allows you to rotate and place any OSRS object into the world, so you can beautify your favourite area in Gielinor — fill the forests, plant more flowers in your own garden, or decorate your POH (house placements are saved and restored every visit).
 
-- **Place objects anywhere** — hold Shift and right-click a tile to Place, Remove or Rotate objects. Up to 3 objects can be stacked per tile.
-- **Rotate to pick** — rotating a placed object also selects it in the panel (object ID and orientation), so you can quickly place more of what you're looking at.
-- **Live 3D preview** — the side panel renders the selected object; right-click-drag to orbit, scroll to zoom.
-- **Facing controls** — N/E/S/W buttons plus a free rotation slider.
-- **Cursor ghost** — optionally show the selected object under your cursor before placing.
-- **Favourites** — save up to 28 named objects; click to load, right-click a slot to remove it.
-- **Player-owned house support** — placements inside your POH are saved separately and restored when you return.
-- **Hide UI** — a screenshot aid that temporarily hides the HUD (minimap, chatbox, inventory) while ticked, and fades it back in when unticked.
-- **Clear Area** — remove every placed object in the current area with one confirmation-guarded button.
+Everything is client-side only. You cannot edit or move any already in-game objects, only you can see your placements, and nothing is ever sent to the server — keeping it safe to use. Your decorations are saved and come back whenever you return to the area.
 
-## Usage
+![Decorating the overworld](screenshots/overworld.png)
 
-1. Enable the plugin and open the **Map Decorator** side panel.
-2. Enter an object ID (or pick a favourite) and choose a facing.
-3. **Shift + right-click** any walkable tile and choose **Place**.
-4. Shift + right-click an existing placement for **Remove** and **Rotate** options.
+There are over 60,000 objects, unnamed, and ranging through the different eras of the game (unfortunately there's no way to map their names to the object IDs that RuneLite returns — half the fun is finding out what's hiding behind a number). You can stack up to 3 objects on a single tile, remember up to 28 favourite object IDs, and place and decorate as many objects in different places as you like.
 
-Placements persist between sessions per region, and per player for the POH.
+![Decorating the POH](screenshots/poh.png)
 
-## Notes
+## User tips
 
-- Everything is cosmetic and local to your client — no game state is modified and no data leaves your machine.
+- Holding shift + right-clicking on any tile while the plugin is active will allow you to place, rotate or remove an object. Rotating an object will "select" that object — so you can find the IDs of objects you previously placed.
+- You can cycle through the objects quickly by using the Cursor Ghost: click on the Object ID number and use the up and down arrows to go through the numbers, and if you move your mouse to the game screen you can view the models at your cursor as you cycle.
+- The Hide UI tickbox hides the game HUD for clean screenshots, and fades it back in when unticked.
+- Clicking the red Clear Area button will open a confirmation box to clear every object in the map area currently loaded around you. Anything not in that area, like another dungeon or your PoH, will remain.
+
+![Overgrowing a cave entrance](screenshots/cave.png)
+
+I've been having so much fun decorating random rooms and dungeons throughout the game as I've been developing it, and I hope you do too.
+
+Please let me know if you find any bugs or have any suggestions to improve — open an issue here on GitHub.
