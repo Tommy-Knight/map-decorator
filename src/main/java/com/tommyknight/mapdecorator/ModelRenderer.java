@@ -5,6 +5,7 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.util.Arrays;
+import java.util.function.IntFunction;
 import net.runelite.api.ModelData;
 
 /**
@@ -16,7 +17,9 @@ import net.runelite.api.ModelData;
  */
 class ModelRenderer
 {
-	private static final Color BG = new Color(28, 28, 36);
+	static final Color DEFAULT_BG = new Color(28, 28, 36);
+
+	private volatile Color background = DEFAULT_BG;
 
 	// Fixed light direction (normalized)
 	private static final float LX = 0.5f, LY = -0.8f, LZ = 0.35f;
@@ -28,9 +31,10 @@ class ModelRenderer
 		final float[] vx, vy, vz;
 		final int[] fi1, fi2, fi3;
 		final int faceCount;
-		final int[] baseRgb; // per-face base RGB from unlit HSL
+		final int[] baseRgb; // per-face base RGB from unlit HSL (or texture average for textured faces)
+		final int[] alpha;   // per-face opacity, 0-255
 
-		Snapshot(float[] vx, float[] vy, float[] vz, int[] fi1, int[] fi2, int[] fi3, int faceCount, int[] baseRgb)
+		Snapshot(float[] vx, float[] vy, float[] vz, int[] fi1, int[] fi2, int[] fi3, int faceCount, int[] baseRgb, int[] alpha)
 		{
 			this.vx = vx;
 			this.vy = vy;
@@ -40,6 +44,7 @@ class ModelRenderer
 			this.fi3 = fi3;
 			this.faceCount = faceCount;
 			this.baseRgb = baseRgb;
+			this.alpha = alpha;
 		}
 	}
 
@@ -50,8 +55,15 @@ class ModelRenderer
 		return snapshot != null;
 	}
 
-	/** Extract data from the model. Must be called on the client thread. */
-	void loadModel(ModelData model)
+	/**
+	 * Extract data from the model. Must be called on the client thread.
+	 *
+	 * @param textureRgb resolves a game texture id to its average RGB, so textured faces
+	 *                   (whose face color is a meaningless placeholder â€” e.g. tree canopies)
+	 *                   render in roughly the right color instead of grey; may be null,
+	 *                   and may return null for unloaded textures (falls back to the HSL color)
+	 */
+	void loadModel(ModelData model, IntFunction<Integer> textureRgb)
 	{
 		float[] vx = model.getVerticesX();
 		float[] vy = model.getVerticesY();
@@ -62,21 +74,44 @@ class ModelRenderer
 		int faceCount = model.getFaceCount();
 
 		short[] unlitColors = model.getFaceColors();
+		short[] faceTextures = model.getFaceTextures();
+		byte[] faceTransparencies = model.getFaceTransparencies();
 		int[] baseRgb = new int[faceCount];
+		int[] alpha = new int[faceCount];
 		for (int i = 0; i < faceCount; i++)
 		{
-			int hsl = (unlitColors != null && i < unlitColors.length)
-				? (unlitColors[i] & 0xFFFF)
-				: 0x3F60; // neutral grey fallback
-			baseRgb[i] = jagexHslToRgb(hsl);
+			Integer texAvg = null;
+			if (faceTextures != null && i < faceTextures.length && faceTextures[i] != -1 && textureRgb != null)
+			{
+				texAvg = textureRgb.apply(faceTextures[i]);
+			}
+			if (texAvg != null)
+			{
+				baseRgb[i] = texAvg;
+			}
+			else
+			{
+				int hsl = (unlitColors != null && i < unlitColors.length)
+					? (unlitColors[i] & 0xFFFF)
+					: 0x3F60; // neutral grey fallback
+				baseRgb[i] = jagexHslToRgb(hsl);
+			}
+			alpha[i] = (faceTransparencies != null && i < faceTransparencies.length)
+				? 255 - (faceTransparencies[i] & 0xFF)
+				: 255;
 		}
 
-		snapshot = new Snapshot(vx, vy, vz, fi1, fi2, fi3, faceCount, baseRgb);
+		snapshot = new Snapshot(vx, vy, vz, fi1, fi2, fi3, faceCount, baseRgb, alpha);
 	}
 
 	void clear()
 	{
 		snapshot = null;
+	}
+
+	void setBackgroundColor(Color color)
+	{
+		background = color;
 	}
 
 	/**
@@ -98,7 +133,7 @@ class ModelRenderer
 
 		Graphics2D g = img.createGraphics();
 		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-		g.setColor(BG);
+		g.setColor(background);
 		g.fillRect(0, 0, w, h);
 
 		// Auto-scale: fit the model's bounding sphere to 80% of the smaller dimension
@@ -167,7 +202,12 @@ class ModelRenderer
 		{
 			int a = s.fi1[fi], b = s.fi2[fi], c = s.fi3[fi];
 
-			// Screen-space signed area — skip backfaces
+			if (s.alpha[fi] <= 8)
+			{
+				continue; // effectively invisible
+			}
+
+			// Screen-space signed area â€” skip backfaces
 			float area = (sx[b] - sx[a]) * (sy[c] - sy[a]) - (sy[b] - sy[a]) * (sx[c] - sx[a]);
 			if (area >= 0)
 			{
@@ -200,15 +240,21 @@ class ModelRenderer
 			px[0] = (int) sx[a]; px[1] = (int) sx[b]; px[2] = (int) sx[c];
 			py[0] = (int) sy[a]; py[1] = (int) sy[b]; py[2] = (int) sy[c];
 
-			g.setColor(new Color(r, gr, bl));
+			g.setColor(new Color(r, gr, bl, s.alpha[fi]));
 			g.fillPolygon(px, py, 3);
+			if (s.alpha[fi] == 255)
+			{
+				// Antialiased fills leave hairline background seams between adjacent triangles;
+				// outlining each opaque face in its own color covers them.
+				g.drawPolygon(px, py, 3);
+			}
 		}
 
 		g.dispose();
 		return img;
 	}
 
-	// ── Color conversion ─────────────────────────────────────────────────
+	// â”€â”€ Color conversion â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 	/**
 	 * Convert Jagex packed HSL (6-bit hue, 3-bit saturation, 7-bit luminance) to sRGB.

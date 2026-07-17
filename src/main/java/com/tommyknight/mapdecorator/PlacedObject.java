@@ -20,19 +20,42 @@ class PlacedObject
 	int orientation;
 	/** Stack slot on this tile: 0 = first placed, 1 = second, 2 = third. */
 	int stackIndex;
+	/** Looping animation sequence id; <= 0 means none. Absent in pre-1.1 saves (defaults to 0). */
+	int animationId;
+	/** Vertical nudge in scene Z units above ground height; positive = up. Absent in pre-1.1 saves (defaults to 0). */
+	int heightOffset;
+	/** Sub-tile horizontal nudge in LocalPoint units (128 = 1 tile), east-west. Absent in pre-1.2 saves (defaults to 0). */
+	int offsetX;
+	/** Sub-tile horizontal nudge in LocalPoint units (128 = 1 tile), north-south. Absent in pre-1.2 saves (defaults to 0). */
+	int offsetY;
+	/** NPC id whose merged model is placed instead of objectId; <= 0 means a plain model. Absent in pre-1.1 saves (defaults to 0). */
+	int npcId;
+	/** Size adjustment in percent, -100..100 where 0 = normal size. Absent in pre-1.1 saves (defaults to 0). */
+	int scale;
+	/** Placed NPCs wander a few tiles from this spot. Absent in pre-1.1 saves (defaults to false). */
+	boolean roam;
 
 	WorldPoint toWorldPoint()
 	{
 		return WorldPoint.fromRegion(regionId, regionX, regionY, plane);
 	}
 
-	PlacedObject withOrientation(int newOrientation)
+	PlacedObject withStackIndex(int newStackIndex)
 	{
-		return new PlacedObject(regionId, regionX, regionY, plane, objectId, newOrientation, stackIndex);
+		return new PlacedObject(regionId, regionX, regionY, plane, objectId, orientation, newStackIndex, animationId, heightOffset, offsetX, offsetY, npcId, scale, roam);
 	}
 
-	PlacedObject rotated()
+	/** True if this and other would look identical if placed (ignores stack slot, which is just where they sit). */
+	boolean sameDecoration(PlacedObject other)
 	{
-		return withOrientation((orientation + 512) % 2048);
+		return objectId == other.objectId
+			&& orientation == other.orientation
+			&& animationId == other.animationId
+			&& heightOffset == other.heightOffset
+			&& offsetX == other.offsetX
+			&& offsetY == other.offsetY
+			&& npcId == other.npcId
+			&& scale == other.scale
+			&& roam == other.roam;
 	}
 }
