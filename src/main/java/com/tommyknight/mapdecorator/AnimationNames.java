@@ -21,6 +21,24 @@ final class AnimationNames
 	private static volatile Map<Integer, String> byId;
 	private static volatile Map<String, Integer> byName;
 	private static volatile Map<Integer, Integer> modelByAnimation;
+	private static volatile Map<Integer, SearchEntry> searchCache;
+
+	/** Precomputed once per attachable animation id, so search doesn't re-lowercase on every keystroke. */
+	private static final class SearchEntry
+	{
+		final String display;
+		final String displayLower;
+		final String animNameLower;
+		final String objectNameLower;
+
+		SearchEntry(String display, String animNameLower, String objectNameLower)
+		{
+			this.display = display;
+			this.displayLower = display.toLowerCase(Locale.ROOT);
+			this.animNameLower = animNameLower;
+			this.objectNameLower = objectNameLower;
+		}
+	}
 
 	/** Name for the given animation id, or null if unknown. */
 	static String name(int id)
@@ -72,7 +90,7 @@ final class AnimationNames
 	/**
 	 * Animation ids with a known scenery model (see {@link #modelFor}), matched against either the
 	 * animation's own gameval constant name OR its paired object's human name (via {@link ObjectModelNames}).
-	 * The constant names are things like "FIREBIRD_WALK" â€” rarely what someone would type â€” so matching
+	 * The constant names are things like "FIREBIRD_WALK" — rarely what someone would type — so matching
 	 * the paired object's name too means searching "fire" actually finds fire animations. Displays the
 	 * object name when known (falling back to the constant name), ranked prefix-matches-first then by
 	 * display length, capped at {@code limit} results.
@@ -81,30 +99,29 @@ final class AnimationNames
 	{
 		load();
 		loadModels();
+		loadSearchCache();
 		String q = query.trim().toLowerCase(Locale.ROOT);
 		if (q.isEmpty())
 		{
 			return List.of();
 		}
 		List<Map.Entry<Integer, String>> results = new ArrayList<>();
-		for (Map.Entry<Integer, Integer> e : modelByAnimation.entrySet())
+		for (Map.Entry<Integer, SearchEntry> e : searchCache.entrySet())
 		{
-			int animId = e.getKey();
-			int modelId = e.getValue();
-			String animName = byId.getOrDefault(animId, String.valueOf(animId));
-			String objectName = ObjectModelNames.name(modelId);
-			boolean matches = animName.toLowerCase(Locale.ROOT).contains(q)
-				|| (objectName != null && objectName.toLowerCase(Locale.ROOT).contains(q));
+			SearchEntry se = e.getValue();
+			boolean matches = se.animNameLower.contains(q)
+				|| (se.objectNameLower != null && se.objectNameLower.contains(q));
 			if (matches)
 			{
-				String display = objectName != null ? objectName : animName;
-				results.add(new AbstractMap.SimpleEntry<>(animId, display));
+				results.add(new AbstractMap.SimpleEntry<>(e.getKey(), se.display));
 			}
 		}
 		results.sort((a, b) ->
 		{
-			boolean aStarts = a.getValue().toLowerCase(Locale.ROOT).startsWith(q);
-			boolean bStarts = b.getValue().toLowerCase(Locale.ROOT).startsWith(q);
+			SearchEntry sa = searchCache.get(a.getKey());
+			SearchEntry sb = searchCache.get(b.getKey());
+			boolean aStarts = sa.displayLower.startsWith(q);
+			boolean bStarts = sb.displayLower.startsWith(q);
 			if (aStarts != bStarts)
 			{
 				return aStarts ? -1 : 1;
@@ -174,6 +191,26 @@ final class AnimationNames
 			// missing or malformed resource: no auto-select available
 		}
 		modelByAnimation = m;
+	}
+
+	private static synchronized void loadSearchCache()
+	{
+		if (searchCache != null)
+		{
+			return;
+		}
+		Map<Integer, SearchEntry> cache = new HashMap<>();
+		for (Map.Entry<Integer, Integer> e : modelByAnimation.entrySet())
+		{
+			int animId = e.getKey();
+			int modelId = e.getValue();
+			String animName = byId.getOrDefault(animId, String.valueOf(animId));
+			String objectName = ObjectModelNames.name(modelId);
+			String display = objectName != null ? objectName : animName;
+			cache.put(animId, new SearchEntry(display, animName.toLowerCase(Locale.ROOT),
+				objectName != null ? objectName.toLowerCase(Locale.ROOT) : null));
+		}
+		searchCache = cache;
 	}
 
 	private AnimationNames()

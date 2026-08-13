@@ -44,10 +44,12 @@ class ModelPreviewComponent extends JPanel
 	private final JButton menuButton;
 	private final JButton undoButton;
 	private final JButton redoButton;
+	private final JButton clearButton;
 	private boolean canUndo;
 	private boolean canRedo;
 	private Runnable undoAction;
 	private Runnable redoAction;
+	private Runnable clearAction;
 	private BufferedImage currentImage;
 	private Consumer<String> backgroundSaver;
 	// Resolves a texture id to its average RGB (client-thread only, like setModel itself)
@@ -119,6 +121,19 @@ class ModelPreviewComponent extends JPanel
 			}
 		});
 		add(redoButton);
+
+		// Reset-geometry square, right of undo/redo
+		clearButton = overlayXButton();
+		clearButton.setBounds(48, SIZE - 18, 20, 18);
+		clearButton.setToolTipText("Reset offset, scale, rotation, height, tint and mirror");
+		clearButton.addActionListener(e ->
+		{
+			if (clearAction != null)
+			{
+				clearAction.run();
+			}
+		});
+		add(clearButton);
 
 		MouseAdapter drag = new MouseAdapter()
 		{
@@ -200,11 +215,43 @@ class ModelPreviewComponent extends JPanel
 		return btn;
 	}
 
+	/** A small translucent square with a bold X, for the reset-geometry action. */
+	private JButton overlayXButton()
+	{
+		JButton btn = new JButton()
+		{
+			@Override
+			protected void paintComponent(Graphics g)
+			{
+				Graphics2D g2 = (Graphics2D) g;
+				g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+				g2.setColor(new Color(0, 0, 0, 140));
+				g2.fillRect(0, 0, getWidth(), getHeight());
+				g2.setColor(Color.WHITE);
+				g2.setStroke(new BasicStroke(2.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+				int pad = 6;
+				g2.drawLine(pad, pad, getWidth() - pad, getHeight() - pad);
+				g2.drawLine(getWidth() - pad, pad, pad, getHeight() - pad);
+			}
+		};
+		btn.setContentAreaFilled(false);
+		btn.setBorderPainted(false);
+		btn.setFocusPainted(false);
+		btn.setOpaque(false);
+		return btn;
+	}
+
 	/** Wires the undo/redo squares to the plugin. */
 	void initUndoRedo(Runnable undo, Runnable redo)
 	{
 		undoAction = undo;
 		redoAction = redo;
+	}
+
+	/** Wires the reset-geometry square to the panel. */
+	void initClear(Runnable clear)
+	{
+		clearAction = clear;
 	}
 
 	/** Updates which of the undo/redo squares draw as available. Call on the EDT. */

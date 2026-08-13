@@ -34,6 +34,10 @@ class PlacedObject
 	int scale;
 	/** Placed NPCs wander a few tiles from this spot. Absent in pre-1.1 saves (defaults to false). */
 	boolean roam;
+	/** Flipped left-to-right. Absent in pre-1.2 saves (defaults to false). */
+	boolean mirror;
+	/** Tint colour with alpha as strength; alpha 0 = no tint. Absent in pre-1.2 saves (defaults to 0). */
+	int tintArgb;
 
 	WorldPoint toWorldPoint()
 	{
@@ -42,7 +46,7 @@ class PlacedObject
 
 	PlacedObject withStackIndex(int newStackIndex)
 	{
-		return new PlacedObject(regionId, regionX, regionY, plane, objectId, orientation, newStackIndex, animationId, heightOffset, offsetX, offsetY, npcId, scale, roam);
+		return new PlacedObject(regionId, regionX, regionY, plane, objectId, orientation, newStackIndex, animationId, heightOffset, offsetX, offsetY, npcId, scale, roam, mirror, tintArgb);
 	}
 
 	/** True if this and other would look identical if placed (ignores stack slot, which is just where they sit). */
@@ -56,6 +60,8 @@ class PlacedObject
 			&& offsetY == other.offsetY
 			&& npcId == other.npcId
 			&& scale == other.scale
-			&& roam == other.roam;
+			&& roam == other.roam
+			&& mirror == other.mirror
+			&& tintArgb == other.tintArgb;
 	}
 }

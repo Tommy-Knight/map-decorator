@@ -24,6 +24,8 @@ final class NpcNames
 	private static volatile Map<Integer, String> byId;
 	private static volatile Map<Integer, Integer> idleAnimById;
 	private static volatile Map<Integer, Integer> walkAnimById;
+	/** Lowercased once at load time so search doesn't re-lowercase every name on every keystroke. */
+	private static volatile Map<Integer, String> byIdLower;
 
 	/** Name for the given npc id, or null if unknown. */
 	static String name(int npcId)
@@ -70,15 +72,15 @@ final class NpcNames
 		List<Map.Entry<Integer, String>> results = new ArrayList<>();
 		for (Map.Entry<Integer, String> e : byId.entrySet())
 		{
-			if (e.getValue().toLowerCase(Locale.ROOT).contains(q))
+			if (byIdLower.get(e.getKey()).contains(q))
 			{
 				results.add(new AbstractMap.SimpleEntry<>(e.getKey(), e.getValue()));
 			}
 		}
 		results.sort((a, b) ->
 		{
-			boolean aStarts = a.getValue().toLowerCase(Locale.ROOT).startsWith(q);
-			boolean bStarts = b.getValue().toLowerCase(Locale.ROOT).startsWith(q);
+			boolean aStarts = byIdLower.get(a.getKey()).startsWith(q);
+			boolean bStarts = byIdLower.get(b.getKey()).startsWith(q);
 			if (aStarts != bStarts)
 			{
 				return aStarts ? -1 : 1;
@@ -98,6 +100,7 @@ final class NpcNames
 		Map<Integer, String> names = new HashMap<>();
 		Map<Integer, Integer> idles = new HashMap<>();
 		Map<Integer, Integer> walks = new HashMap<>();
+		Map<Integer, String> lower = new HashMap<>();
 		try (InputStream in = NpcNames.class.getResourceAsStream("npc_names.tsv");
 			BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8)))
 		{
@@ -116,6 +119,7 @@ final class NpcNames
 					continue;
 				}
 				names.put(id, parts[1]);
+				lower.put(id, parts[1].toLowerCase(Locale.ROOT));
 				try
 				{
 					if (parts.length >= 3)
@@ -139,6 +143,7 @@ final class NpcNames
 		byId = names;
 		idleAnimById = idles;
 		walkAnimById = walks;
+		byIdLower = lower;
 	}
 
 	private NpcNames()

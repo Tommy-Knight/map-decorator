@@ -1,113 +1,104 @@
 # Map Decorator
 
-Decorate the world. Place any game object, animate it, resize it, nudge it between tiles,
-populate the place with wandering NPCs, then share the whole scene with a copy-paste code.
-Everything is client-side: only you see it, and nothing you place touches the game.
+Place any object or NPC in the game, anywhere. Client-side only — nobody else sees it, and nothing you place touches the server.
 
-![A decorated garden scene with the Map Decorator panel open](screenshots/scene.png)
+![Decorating a player-owned house: objects being placed, rotated and scaled inside a POH room](screenshots/poh2.gif)
 
-## Getting started
+## Basics
 
-- Open the Map Decorator panel from the sidebar
-- **Shift right-click any tile** and choose **Place** to put down the selected object
+- Open the panel from the sidebar
+- **Shift right-click a tile → Place**
 - Shift right-click a placed object for **Edit** and **Remove**
-- Up to 3 objects can share one tile
-- Everything you place is saved automatically and comes back when you log in
+- 3 objects per tile
+- Saves automatically, comes back on login
 
-## Finding things to place
+## Finding things
 
-- **Object box**: type 2 or more letters to search every named model in the game
-  ("tree", "stool", "fountain"). The arrows step through every model id, named or not.
-  Not all models are named, but these can still be found with the arrow keys
-- **NPC box**: search any NPC by name ("man", "guard", "huge spider") and place them as
-  living decorations, true colours and idle animation included
-- **Animation box**: search animated scenery by what it is ("fire", "flag"). Picking an
-  animation selects its matching object automatically
-- The dropdowns are keyboard friendly: arrow keys move through results, Enter picks,
-  Escape closes. Whatever is highlighted is exactly what you see and what you place
-- One click in any box highlights the text, so you can just type over it
+- **Object** — type 2+ letters to search every named model ("tree", "stool", "fountain"). Arrows step through 70,000 model ids, named or not
+- **NPC** — search by name ("guard", "cat"). Places with correct colours and idle animation
+- **Animation** — search by what the thing is ("cow", "flag"). Picking one auto-selects its object
+- Arrow keys move, Enter picks, Escape closes. Whatever's in the preview is what you get
 
-## Positioning
+## Placing
 
-- **Rotation**: 0 to 360 degrees, or use the N / E / S / W buttons for quick facing
-- **Height**: raise or lower objects off the ground. Floating candles, sunken ruins
-- **Offset X / Y**: nudge within a tile, 128 units is one full tile. Perfect for placing
-  something between two tiles or flush against a wall
-- **Scale**: shrink or grow anything up to double size
-- Hold the arrow keys on any box to glide values, and watch the change live in the world
+- Objects land **exactly where you clicked** within the tile, not snapped to the centre
+- **Snap** — turn that off, back to dead-centre. Good for walls and fences
+- **Random** — randomises rotation and mirror on every placement. For scattering trees and rocks without doing it by hand
 
-## The preview window
+![Decorating in Falador: a scene being built up object by object](screenshots/fally.gif)
 
-- Interactive 3D preview of your selection: drag to rotate, scroll to zoom, right-drag to pan
-- Burger menu (top left) changes the backdrop: black, white, green, skybox. Remembered
-  between sessions
-- **Undo and redo arrows** live in the bottom corner (see Undo below)
+## Adjusting
 
-## Editing what you've placed
+- **Rotation** — 0–360°, wraps past either end. `«` `»` turn 90° a click. N/E/S/W for absolute facing
+- **Height** — raise or sink. Floating candles, half-buried ruins
+- **Offset X/Y** — nudge within the tile, 128 units is a full tile
+- **Scale** — shrink to nothing or grow to double
+- **Tint** — recolour anything. Opacity slider is the strength
+- **Mirror** — flip left-to-right
+- `«` `»` jump to min/max; click again to return to 0
+- Hold an arrow key to glide a value and watch it move live
 
-- Shift right-click a placed object, choose **Edit**
-- The panel loads that object's exact settings, and every control now moves the real
-  object live. Nudge its height with the arrow keys and watch it rise
-- **Done** (green) keeps your changes, **Cancel** (red) puts everything back as it was
-- While editing, the Place option is hidden so you can't stamp accidental copies
+## Preview
 
-## Bringing scenes to life
+- Drag to rotate, scroll to zoom, right-drag to pan
+- Burger menu changes the backdrop. Remembered between sessions
+- Undo, redo and reset sit in the bottom corner
 
-- Placed NPCs stand and idle like the real thing
-- Tick the **roam checkbox** in the NPC row and placed NPCs wander up to 3 tiles from
-  their spot, walking, pausing, turning around randomly
-- Animated scenery (fires, flags, wheels) plays its real looping animation
+## Editing
+
+- Shift right-click → **Edit**. The panel loads that object's exact settings
+- Every control now moves the real object live
+- **Done** keeps it, **Cancel** puts it back
+- Place is hidden while editing, so you can't stamp accidental copies
+
+## Making it move
+
+- Placed NPCs stand and idle properly
+- Tick **roam** and they wander up to 3 tiles, walking and pausing and turning around
+- Animated scenery plays its real looping animation
 
 ## Toggles
 
-- **Cursor ghost**: a live preview of your selection follows your mouse across the tiles
-- **Be Object**: hide your player and walk the world as your selected object or NPC.
-  NPCs even play their real walking animation as you move
-- **Hide UI**: clears the whole interface for clean screenshots
-- **Hide Menu**: removes the plugin's right-click options, so the game feels untouched
+- **Cursor ghost** — live preview of your selection follows the mouse
+- **Be Object** — hide your player and walk around as the selected object or NPC, walk animation included. Pick something that flies and you fly
+- **Hide UI** — clears the interface for screenshots (resizable mode)
+- **Hide Menu** — removes the plugin's right-click entries so the game feels untouched
 
-## Undo and redo
+## Undo
 
-- The arrow buttons on the preview undo and redo up to 50 steps
-- Covers placing, removing, edits, imports, Clear Area, and even a misclicked favourite
-  that overwrote your selection
-- Cleared an entire area by accident? One click brings it all back
+- 50 steps, on the preview arrows
+- Covers placing, removing, edits, imports, Clear Area, and misclicked favourites
+- Cleared an area by accident? One click
 
-## Favourites
+## Favourites and Layouts
 
-- Save your current setup to a named slot with the star button
-- A favourite stores the complete recipe: object or NPC, animation, rotation, height,
-  offsets, scale, roam
-- Left-click to load, right-click to remove a slot, and grow the list up to 28 slots
+- **Favourites** — star button saves the whole recipe: object or NPC, animation, rotation, height, offsets, scale, tint, mirror, roam. Left-click loads, right-click renames or removes
+- **Layouts** — named export/import codes kept between sessions, so you can rebuild a scene later or hand it to someone
 
 ## Sharing
 
-- **Export Nearby** copies everything within 100 tiles to your clipboard as a single code
-- Send it to a friend; they stand in the same place, copy it, and press **Import**
-- Imports skip duplicates and never overwrite a full tile
+- **Export Nearby** copies everything within 100 tiles as one code
+- They go to same place and press **Import**
+- Duplicates are skipped, full tiles are never overwritten
 
-## Player-owned house
+## Player-owned houses
 
-- Everything works in the POH too, saved per account
-
-![Decorating the POH](screenshots/poh.png)
+- Works the same inside a POH, saved per account
+- Rooms are matched by their furniture, so an imported layout only lands in rooms that actually match. A differently built house gets a partial fit or nothing
+- Objects on other floors stay hidden until you're on that floor
 
 ## Tips
 
-- **Copy a placed object**: Edit it, then immediately press Done. Its full recipe stays
-  loaded in the panel, ready to stamp duplicates
-- Use tab and shift-tab when editing an object to go up and down the menu quickly
-- Search "fire" in the Animation box for the classic campfire
-- Negative height sinks objects into the floor for ruins and half-buried props
-- Be Object plus a scaled-up spider is a personality statement
-
-![Overgrowing a cave entrance](screenshots/cave.png)
+- **Duplicate an object**: Edit it, press Done. The recipe stays loaded, ready to stamp
+- Tab and shift-tab move through the panel while editing
+- Negative height sinks things into the floor for ruins
+- Random plus a handful of trees fills space faster than placing them one at a time
 
 ## Good to know
 
-- Client-side only: nobody else sees your decorations, and gameplay is unaffected
-- Objects are visual only, they have no collision and can't be interacted with
-- Very large NPCs may clip terrain when placed or scaled
-- Decorations follow your RuneLite profile
+- Client-side only. Nobody else sees any of it and gameplay is unaffected
+- Decorations are visual — no collision, can't be clicked
+- Very large NPCs can clip terrain
+- Saved against your RuneLite profile
 
-Found a bug or have a suggestion? Open an issue here on GitHub.
+Bug or suggestion? Open an issue.

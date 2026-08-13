@@ -18,4 +18,6 @@ class PanelSelection
 	int offsetY;
 	int scale;
 	boolean roam;
+	boolean mirror;
+	int tintArgb;
 }

@@ -27,4 +27,8 @@ class Favourite
 	int scale;
 	/** Placed NPCs wander a few tiles from where they are put. Absent in pre-1.1 saves (defaults to false). */
 	boolean roam;
+	/** Flipped left-to-right. Absent in pre-1.2 saves (defaults to false). */
+	boolean mirror;
+	/** Tint colour with alpha as strength; alpha 0 = no tint. Absent in pre-1.2 saves (defaults to 0). */
+	int tintArgb;
 }

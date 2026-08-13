@@ -20,6 +20,8 @@ final class ObjectModelNames
 {
 	private static volatile Map<Integer, String> byId;
 	private static volatile Map<String, Integer> byName;
+	/** Lowercased once at load time so search doesn't re-lowercase ~14k names on every keystroke. */
+	private static volatile Map<Integer, String> byIdLower;
 
 	/** Name of a known object using this model id, or null if unknown. */
 	static String name(int modelId)
@@ -50,15 +52,15 @@ final class ObjectModelNames
 		List<Map.Entry<Integer, String>> results = new ArrayList<>();
 		for (Map.Entry<Integer, String> e : byId.entrySet())
 		{
-			if (e.getValue().toLowerCase(Locale.ROOT).contains(q))
+			if (byIdLower.get(e.getKey()).contains(q))
 			{
 				results.add(e);
 			}
 		}
 		results.sort((a, b) ->
 		{
-			boolean aStarts = a.getValue().toLowerCase(Locale.ROOT).startsWith(q);
-			boolean bStarts = b.getValue().toLowerCase(Locale.ROOT).startsWith(q);
+			boolean aStarts = byIdLower.get(a.getKey()).startsWith(q);
+			boolean bStarts = byIdLower.get(b.getKey()).startsWith(q);
 			if (aStarts != bStarts)
 			{
 				return aStarts ? -1 : 1;
@@ -77,6 +79,7 @@ final class ObjectModelNames
 		}
 		Map<Integer, String> m = new HashMap<>();
 		Map<String, Integer> r = new HashMap<>();
+		Map<Integer, String> lower = new HashMap<>();
 		try (InputStream in = ObjectModelNames.class.getResourceAsStream("object_models.tsv");
 			BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8)))
 		{
@@ -97,6 +100,7 @@ final class ObjectModelNames
 				}
 				m.put(id, name);
 				r.putIfAbsent(name.toUpperCase(Locale.ROOT), id);
+				lower.put(id, name.toLowerCase(Locale.ROOT));
 			}
 		}
 		catch (Exception e)
@@ -105,6 +109,7 @@ final class ObjectModelNames
 		}
 		byId = m;
 		byName = r;
+		byIdLower = lower;
 	}
 
 	private ObjectModelNames()

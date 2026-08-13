@@ -1,12 +1,20 @@
 package com.tommyknight.mapdecorator;
 
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.GridLayout;
 import java.awt.Insets;
+import java.awt.RenderingHints;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.KeyAdapter;
@@ -18,6 +26,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.IntFunction;
@@ -29,6 +38,9 @@ import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.JColorChooser;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JFormattedTextField;
 import javax.swing.JCheckBox;
 import javax.swing.JLabel;
@@ -38,7 +50,9 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.JSlider;
 import javax.swing.JSpinner;
+import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import java.awt.Rectangle;
 import javax.swing.Scrollable;
@@ -46,11 +60,11 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
+import javax.swing.border.MatteBorder;
+import javax.swing.colorchooser.AbstractColorChooserPanel;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.text.DefaultFormatterFactory;
-import net.runelite.api.ModelData;
-import net.runelite.client.callback.ClientThread;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
@@ -61,13 +75,12 @@ class MapDecoratorPanel extends PluginPanel
 	static final int FACING_W = 512;
 	static final int FACING_N = 1024;
 	static final int FACING_E = 1536;
-	private static final int MAX_FAV_SLOTS = 28;
+	private static final int MAX_FAV_SLOTS = MapDecoratorPlugin.MAX_FAV_SLOTS;
 
 	private static final Color SLOT_EMPTY_FG = ColorScheme.MEDIUM_GRAY_COLOR;
 	private static final Color SLOT_FILLED_FG = Color.WHITE;
 	private static final Color STAR_COLOR = new Color(255, 200, 50);
 
-	private final ClientThread clientThread;
 	private MapDecoratorPlugin plugin;
 
 	private final JSpinner objectIdSpinner;
@@ -93,26 +106,40 @@ class MapDecoratorPanel extends PluginPanel
 	private volatile int selectedOffsetY = 0;
 	private volatile int selectedScale = 0;
 	private volatile boolean selectedRoam = false;
+	private volatile boolean selectedMirror = false;
+	// Tint colour with alpha as strength; alpha 0 = no tint (default)
+	private volatile int selectedTintArgb = 0x00C83C3C;
 	// Set while the animation-selector is programmatically switching the Object box to a paired
 	// model, so that sync doesn't immediately trip the "object changed" auto-clear below.
 	private volatile boolean suppressAnimationClear = false;
+	// Bumped on every refreshPreviewAndGhost() call; a completed async load only applies its
+	// result if it's still the latest request, so rapid spinner scrolling can't paint a stale,
+	// already-superseded model over whatever's actually selected now.
+	private final AtomicLong previewRequestGeneration = new AtomicLong();
 
 	// Set while a placed object is bound to the controls (right-click â†’ Edit); every control
 	// change is then applied to that object live instead of just the ghost.
 	private volatile boolean editing = false;
 	private final JPanel editBanner;
 	private final JLabel editLabel;
+	private JCheckBox mirrorChk;
+	private JCheckBox snapChk;
+	private JCheckBox randomChk;
+	private JButton tintSwatch;
 
 	private final JPanel favsRows;
 	private int visibleSlots = 5;
 	private JButton addSlotBtn;
 	private JLabel favCountLabel;
+	private CollapsibleSection favsSection;
+
+	private final JPanel savesRows;
+	private CollapsibleSection savesSection;
 
 	@Inject
-	MapDecoratorPanel(ClientThread clientThread)
+	MapDecoratorPanel()
 	{
 		super(false);
-		this.clientThread = clientThread;
 
 		setLayout(new BorderLayout(0, 0));
 		setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
@@ -257,7 +284,7 @@ class MapDecoratorPanel extends PluginPanel
 			selectedOffsetX = (Integer) offsetXSpinner.getValue();
 			applyEditIfActive();
 		});
-		JPanel offsetXRow = createFormRow("Offset X", offsetXSpinner);
+		JPanel offsetXRow = createFormRow("Offset X", createArrowExtremeButtons(offsetXSpinner), offsetXSpinner);
 
 		offsetYSpinner = new JSpinner(new SpinnerNumberModel(0, -64, 64, 1));
 		offsetYSpinner.setPreferredSize(new Dimension(70, 24));
@@ -266,7 +293,7 @@ class MapDecoratorPanel extends PluginPanel
 			selectedOffsetY = (Integer) offsetYSpinner.getValue();
 			applyEditIfActive();
 		});
-		JPanel offsetYRow = createFormRow("Offset Y", offsetYSpinner);
+		JPanel offsetYRow = createFormRow("Offset Y", createArrowExtremeButtons(offsetYSpinner), offsetYSpinner);
 
 		// Height â€” vertical nudge, applied to the ghost/placed object's Z above ground
 		heightSpinner = new JSpinner(new SpinnerNumberModel(0, -256, 256, 1));
@@ -276,10 +303,10 @@ class MapDecoratorPanel extends PluginPanel
 			selectedHeightOffset = (Integer) heightSpinner.getValue();
 			applyEditIfActive();
 		});
-		JPanel heightRow = createFormRow("Height", heightSpinner);
+		JPanel heightRow = createFormRow("Height", createArrowExtremeButtons(heightSpinner), heightSpinner);
 
 		// Rotation â€” 0-360Â°; the NESW buttons below select themselves when it lands on a multiple of 90
-		rotationSpinner = new JSpinner(new SpinnerNumberModel(180, 0, 360, 1));
+		rotationSpinner = new JSpinner(new WrappingDegreeSpinnerModel(180));
 		rotationSpinner.setPreferredSize(new Dimension(70, 24));
 		rotationSpinner.addChangeListener(e ->
 		{
@@ -289,7 +316,7 @@ class MapDecoratorPanel extends PluginPanel
 			updateFacingSelection(deg);
 			applyEditIfActive();
 		});
-		JPanel rotationRow = createFormRow("Rotation", rotationSpinner);
+		JPanel rotationRow = createFormRow("Rotation", createRotationStepButtons(rotationSpinner), rotationSpinner);
 
 		// Scale â€” size adjustment in percent; 0 = the model's normal size
 		scaleSpinner = new JSpinner(new SpinnerNumberModel(0, -100, 100, 1));
@@ -300,7 +327,7 @@ class MapDecoratorPanel extends PluginPanel
 			refreshPreviewAndGhost();
 			applyEditIfActive();
 		});
-		JPanel scaleRow = createFormRow("Scale", scaleSpinner);
+		JPanel scaleRow = createFormRow("Scale", createArrowExtremeButtons(scaleSpinner), scaleSpinner);
 
 		for (JSpinner spinner : new JSpinner[]{offsetXSpinner, offsetYSpinner, heightSpinner, rotationSpinner, scaleSpinner})
 		{
@@ -345,6 +372,46 @@ class MapDecoratorPanel extends PluginPanel
 			facingButtons.add(btn);
 		}
 
+		// Mirror (prototype) â€” flips the model across its vertical axis
+		mirrorChk = new JCheckBox("Mirror");
+		mirrorChk.setToolTipText("Flip the object left-to-right (prototype)");
+		mirrorChk.setForeground(Color.WHITE);
+		mirrorChk.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		mirrorChk.setFont(FontManager.getRunescapeSmallFont());
+		mirrorChk.addActionListener(e ->
+		{
+			selectedMirror = mirrorChk.isSelected();
+			refreshPreviewAndGhost();
+			applyEditIfActive();
+		});
+
+		// Tint (prototype) â€” a colour swatch; the picker's opacity is the tint strength, 0 = off
+		JLabel tintLabel = new JLabel("Tint");
+		tintLabel.setForeground(Color.WHITE);
+		tintLabel.setFont(FontManager.getRunescapeSmallFont());
+
+		tintSwatch = new JButton();
+		tintSwatch.setFocusPainted(false);
+		tintSwatch.setPreferredSize(new Dimension(30, 18));
+		tintSwatch.setToolTipText("Paint the object a colour; raise the picker's opacity from zero to apply");
+		applyTintSwatch(tintSwatch);
+		tintSwatch.addActionListener(e ->
+		{
+			Color picked = openTintChooser(new Color(selectedTintArgb, true));
+			if (picked != null)
+			{
+				selectedTintArgb = picked.getRGB();
+				applyTintSwatch(tintSwatch);
+				refreshPreviewAndGhost();
+				applyEditIfActive();
+			}
+		});
+
+		JPanel tintCell = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+		tintCell.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		tintCell.add(tintSwatch);
+		tintCell.add(tintLabel);
+
 		// Cursor ghost / Hide UI checkboxes
 		JCheckBox ghostToggle = new JCheckBox("Cursor ghost");
 		ghostToggle.setToolTipText("Show a ghost of your selection on the tile under the cursor");
@@ -360,7 +427,7 @@ class MapDecoratorPanel extends PluginPanel
 		});
 
 		JCheckBox hideUiChk = new JCheckBox("Hide UI");
-		hideUiChk.setToolTipText("Hide the game interface");
+		hideUiChk.setToolTipText("Hide the resizable game interface");
 		hideUiChk.setForeground(Color.WHITE);
 		hideUiChk.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		hideUiChk.setFont(FontManager.getRunescapeSmallFont());
@@ -398,21 +465,54 @@ class MapDecoratorPanel extends PluginPanel
 			}
 		});
 
-		JPanel ghostRow = new JPanel(new GridLayout(2, 2, 6, 2));
-		ghostRow.setBackground(ColorScheme.DARK_GRAY_COLOR);
-		ghostRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-		ghostRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
-		ghostRow.add(ghostToggle);
-		ghostRow.add(beObjectChk);
-		ghostRow.add(hideUiChk);
-		ghostRow.add(hideMenuChk);
+		// Snap â€” off by default, so placement lands exactly under the cursor instead of
+		// dead-center on the tile; toggling this on restores the old tile-center behaviour.
+		snapChk = new JCheckBox("Snap");
+		snapChk.setToolTipText("Place dead-center on the tile instead of exactly under your cursor");
+		snapChk.setForeground(Color.WHITE);
+		snapChk.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		snapChk.setFont(FontManager.getRunescapeSmallFont());
+		snapChk.addActionListener(e ->
+		{
+			if (plugin != null)
+			{
+				plugin.setSnapEnabled(snapChk.isSelected());
+			}
+		});
+
+		// Random â€” randomizes rotation and mirror on every placement (offset/scale left alone
+		// to avoid clipping/oversized-model issues with scatter placement).
+		randomChk = new JCheckBox("Random");
+		randomChk.setToolTipText("Randomize rotation and mirror on every placement, for natural-looking scatter");
+		randomChk.setForeground(Color.WHITE);
+		randomChk.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		randomChk.setFont(FontManager.getRunescapeSmallFont());
+		randomChk.addActionListener(e ->
+		{
+			boolean enabled = randomChk.isSelected();
+			if (plugin != null)
+			{
+				plugin.setRandomEnabled(enabled);
+			}
+			setGeometryControlsEnabled(!enabled);
+		});
+
+		// Left column: Tint, Cursor ghost, Be Object, Snap â€” right column: Mirror, Random, Hide UI, Hide Menu
+		// Random sits under Mirror because it overrides it; the two Hide toggles pair at the bottom.
+		JPanel togglesGrid = new JPanel(new GridLayout(4, 2, 6, 2));
+		togglesGrid.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		togglesGrid.setAlignmentX(Component.LEFT_ALIGNMENT);
+		togglesGrid.setMaximumSize(new Dimension(Integer.MAX_VALUE, 98));
+		togglesGrid.add(tintCell);
+		togglesGrid.add(mirrorChk);
+		togglesGrid.add(ghostToggle);
+		togglesGrid.add(randomChk);
+		togglesGrid.add(beObjectChk);
+		togglesGrid.add(hideUiChk);
+		togglesGrid.add(snapChk);
+		togglesGrid.add(hideMenuChk);
 
 		// Favourites section
-		JLabel favsLabel = new JLabel("Favourites");
-		favsLabel.setForeground(Color.WHITE);
-		favsLabel.setFont(FontManager.getRunescapeSmallFont());
-		favsLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
 		favsRows = new JPanel();
 		favsRows.setLayout(new BoxLayout(favsRows, BoxLayout.Y_AXIS));
 		favsRows.setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -442,6 +542,40 @@ class MapDecoratorPanel extends PluginPanel
 		addRow.add(Box.createHorizontalGlue());
 		addRow.add(favCountLabel);
 
+		JPanel favsBody = new JPanel();
+		favsBody.setLayout(new BoxLayout(favsBody, BoxLayout.Y_AXIS));
+		favsBody.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		favsBody.setAlignmentX(Component.LEFT_ALIGNMENT);
+		favsBody.add(favsRows);
+		favsBody.add(Box.createVerticalStrut(3));
+		favsBody.add(addRow);
+
+		favsSection = new CollapsibleSection("Favourites",
+			"Saved object recipes you can load with one click. Click to expand or collapse", favsBody);
+		favsSection.setOnToggle(() ->
+		{
+			if (plugin != null)
+			{
+				plugin.setFavouritesExpanded(favsSection.isExpanded());
+			}
+		});
+
+		// Saves section (named export/import codes, kept for later)
+		savesRows = new JPanel();
+		savesRows.setLayout(new BoxLayout(savesRows, BoxLayout.Y_AXIS));
+		savesRows.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		savesRows.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+		savesSection = new CollapsibleSection("Layouts",
+			"Named export/import codes kept for later. Click to expand or collapse", savesRows);
+		savesSection.setOnToggle(() ->
+		{
+			if (plugin != null)
+			{
+				plugin.setSavesExpanded(savesSection.isExpanded());
+			}
+		});
+
 		// Assemble controls panel
 		controls.add(idRow);
 		controls.add(Box.createVerticalStrut(4));
@@ -455,19 +589,22 @@ class MapDecoratorPanel extends PluginPanel
 		controls.add(Box.createVerticalStrut(4));
 		controls.add(heightRow);
 		controls.add(Box.createVerticalStrut(4));
-		controls.add(rotationRow);
-		controls.add(Box.createVerticalStrut(4));
 		controls.add(scaleRow);
 		controls.add(Box.createVerticalStrut(4));
-		controls.add(facingButtons);
-		controls.add(Box.createVerticalStrut(14));
-		controls.add(ghostRow);
-		controls.add(Box.createVerticalStrut(14));
-		controls.add(favsLabel);
+		// Rotation sits last so it's adjacent to the NESW buttons, which drive the same value
+		controls.add(rotationRow);
 		controls.add(Box.createVerticalStrut(4));
-		controls.add(favsRows);
-		controls.add(Box.createVerticalStrut(3));
-		controls.add(addRow);
+		controls.add(facingButtons);
+		controls.add(Box.createVerticalStrut(12));
+		controls.add(togglesGrid);
+		controls.add(Box.createVerticalStrut(14));
+		controls.add(favsSection.header);
+		controls.add(Box.createVerticalStrut(4));
+		controls.add(favsBody);
+		controls.add(Box.createVerticalStrut(14));
+		controls.add(savesSection.header);
+		controls.add(Box.createVerticalStrut(4));
+		controls.add(savesRows);
 		controls.add(Box.createVerticalStrut(8));
 
 		JScrollPane scrollPane = new JScrollPane(controls,
@@ -593,6 +730,70 @@ class MapDecoratorPanel extends PluginPanel
 		}
 	}
 
+	/** Paints the swatch its current colour, or a muted "off" look when the tint is fully transparent. */
+	private void applyTintSwatch(JButton swatch)
+	{
+		if (((selectedTintArgb >>> 24) & 0xFF) > 0)
+		{
+			swatch.setBackground(new Color(selectedTintArgb & 0xFFFFFF));
+			swatch.setText("");
+		}
+		else
+		{
+			swatch.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+			swatch.setText("â€“");
+		}
+	}
+
+	/** A colour picker whose opacity slider is the tint strength (0 = no tint). Returns null on cancel. */
+	private Color openTintChooser(Color initial)
+	{
+		JColorChooser chooser = new JColorChooser(new Color(initial.getRed(), initial.getGreen(), initial.getBlue()));
+		keepOnlyHsvPanel(chooser);
+		JSlider alpha = new JSlider(0, 255, initial.getAlpha());
+		JLabel alphaVal = new JLabel();
+		Runnable update = () -> alphaVal.setText("Opacity " + (alpha.getValue() * 100 / 255) + "%   ");
+		update.run();
+		alpha.addChangeListener(ev -> update.run());
+
+		JPanel alphaPanel = new JPanel(new BorderLayout(6, 0));
+		alphaPanel.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
+		alphaPanel.add(alphaVal, BorderLayout.WEST);
+		alphaPanel.add(alpha, BorderLayout.CENTER);
+		chooser.setPreviewPanel(alphaPanel);
+
+		Color[] result = {null};
+		JDialog dialog = JColorChooser.createDialog(this, "Tint colour", true, chooser,
+			ev ->
+			{
+				Color c = chooser.getColor();
+				result[0] = new Color(c.getRed(), c.getGreen(), c.getBlue(), alpha.getValue());
+			},
+			null);
+		dialog.setVisible(true);
+		return result[0];
+	}
+
+	/**
+	 * Strips the colour chooser down to its HSV tab. Swatches/RGB/CMYK are noise for picking a
+	 * tint â€” hue and saturation are what actually read as "paint it this colour", and opacity
+	 * (the tint strength) lives on our own slider in the preview panel instead.
+	 * <p>
+	 * Tab names are localised, so if no HSV panel is found this leaves the chooser untouched
+	 * rather than stripping it down to nothing.
+	 */
+	private static void keepOnlyHsvPanel(JColorChooser chooser)
+	{
+		for (AbstractColorChooserPanel p : chooser.getChooserPanels())
+		{
+			if ("HSV".equalsIgnoreCase(p.getDisplayName()))
+			{
+				chooser.setChooserPanels(new AbstractColorChooserPanel[]{p});
+				return;
+			}
+		}
+	}
+
 	/** Tooltip on the spinner, its arrows, and its text field alike. */
 	private static void setSpinnerTooltip(JSpinner spinner, String tip)
 	{
@@ -689,6 +890,124 @@ class MapDecoratorPanel extends PluginPanel
 		return row;
 	}
 
+	/**
+	 * Same as {@link #createFormRow(String, Component)}, but with a min/max quick-jump control
+	 * placed immediately to the left of the spinner instead of leaving that space empty.
+	 * A/B comparison scaffold â€” each of the five rows using this overload currently wires a
+	 * different button style so they can be compared live before settling on one.
+	 */
+	private JPanel createFormRow(String labelText, JComponent leading, JSpinner spinner)
+	{
+		JLabel label = new JLabel(labelText);
+		label.setForeground(Color.WHITE);
+		label.setFont(FontManager.getRunescapeSmallFont());
+
+		JPanel east = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+		east.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		east.add(leading);
+		east.add(spinner);
+
+		JPanel row = new JPanel(new BorderLayout());
+		row.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+		row.add(label, BorderLayout.WEST);
+		row.add(east, BorderLayout.EAST);
+		return row;
+	}
+
+	/** A small bordered button with the given text, styled to match the panel's other small buttons. */
+	/**
+	 * A small translucent square with a bold double-chevron, for "jump to min/max" (not a Â±1 nudge).
+	 * left=true points left/toward the minimum ("&lt;&lt;"), left=false points right/toward the
+	 * maximum ("&gt;&gt;") â€” each chevron's vertex sits closer to that edge of the button, with its
+	 * two open ends trailing away from it.
+	 */
+	private JButton doubleArrowButton(boolean left, Runnable action)
+	{
+		JButton btn = new JButton()
+		{
+			@Override
+			protected void paintComponent(Graphics g)
+			{
+				Graphics2D g2 = (Graphics2D) g;
+				g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+				g2.setColor(ColorScheme.DARKER_GRAY_COLOR);
+				g2.fillRect(0, 0, getWidth(), getHeight());
+				g2.setColor(Color.WHITE);
+				g2.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+				int cy = getHeight() / 2;
+				int dir = left ? 1 : -1;
+				int[] vertices = left ? new int[]{5, 10} : new int[]{getWidth() - 5, getWidth() - 10};
+				for (int vx : vertices)
+				{
+					int openX = vx + 4 * dir;
+					g2.drawLine(vx, cy, openX, cy - 4);
+					g2.drawLine(vx, cy, openX, cy + 4);
+				}
+			}
+		};
+		btn.setPreferredSize(new Dimension(20, 20));
+		btn.setContentAreaFilled(false);
+		btn.setBorderPainted(false);
+		btn.setFocusPainted(false);
+		btn.setFocusable(false);
+		btn.addActionListener(e -> action.run());
+		return btn;
+	}
+
+	/**
+	 * Two double-arrow buttons that jump a spinner to its min/max, placed left of the spinner.
+	 * Clicking again from an extreme returns the field to 0, so each button doubles as a
+	 * per-field reset without a third button competing for the row's space.
+	 */
+	private JPanel createArrowExtremeButtons(JSpinner spinner)
+	{
+		SpinnerNumberModel model = (SpinnerNumberModel) spinner.getModel();
+		JButton min = doubleArrowButton(true, () -> toggleExtreme(spinner, model.getMinimum()));
+		min.setToolTipText("Jump to the minimum, or back to 0 if already there");
+		JButton max = doubleArrowButton(false, () -> toggleExtreme(spinner, model.getMaximum()));
+		max.setToolTipText("Jump to the maximum, or back to 0 if already there");
+		return arrowButtonRow(min, max);
+	}
+
+	/** Sets the spinner to {@code extreme}, or back to 0 when it is already sitting there. */
+	private static void toggleExtreme(JSpinner spinner, Comparable<?> extreme)
+	{
+		Object target = extreme.equals(spinner.getValue()) ? Integer.valueOf(0) : extreme;
+		spinner.setValue(target);
+	}
+
+	/**
+	 * Rotation's pair steps 90 degrees per click rather than jumping to an extreme: 0 and 360 are
+	 * the same heading, so min/max would both just mean "north". Stepping is relative to the
+	 * current angle, which complements the absolute N/E/S/W buttons instead of duplicating them.
+	 */
+	private JPanel createRotationStepButtons(JSpinner spinner)
+	{
+		JButton ccw = doubleArrowButton(true, () -> stepDegrees(spinner, -90));
+		ccw.setToolTipText("Turn 90 degrees anticlockwise");
+		JButton cw = doubleArrowButton(false, () -> stepDegrees(spinner, 90));
+		cw.setToolTipText("Turn 90 degrees clockwise");
+		return arrowButtonRow(ccw, cw);
+	}
+
+	/** Turns by {@code delta} degrees, wrapping through 0/360 in either direction. */
+	private static void stepDegrees(JSpinner spinner, int delta)
+	{
+		int deg = ((Integer) spinner.getValue() + delta) % 360;
+		spinner.setValue(deg < 0 ? deg + 360 : deg);
+	}
+
+	private static JPanel arrowButtonRow(JButton left, JButton right)
+	{
+		JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 0));
+		panel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		panel.add(left);
+		panel.add(right);
+		return panel;
+	}
+
 	/** Extracts the id from our "Name (id)" display format, or null if the text isn't in that shape. */
 	private static Integer trailingId(String text)
 	{
@@ -724,12 +1043,24 @@ class MapDecoratorPanel extends PluginPanel
 		facingButtonsByOrientation.get(orientation).setSelected(true);
 	}
 
+	/** Greys out the facing/rotation/mirror controls while Random is on, since it overrides all three per-placement. */
+	private void setGeometryControlsEnabled(boolean enabled)
+	{
+		for (JToggleButton btn : facingButtonsByOrientation.values())
+		{
+			btn.setEnabled(enabled);
+		}
+		rotationSpinner.setEnabled(enabled);
+		mirrorChk.setEnabled(enabled);
+	}
+
 	void init(MapDecoratorPlugin plugin)
 	{
 		this.plugin = plugin;
 		preview.initBackground(plugin.getPreviewBackground(), plugin::setPreviewBackground);
 		preview.setTextureColorResolver(plugin::textureAverageRgb);
 		preview.initUndoRedo(plugin::undo, plugin::redo);
+		preview.initClear(this::clearGeometry);
 		visibleSlots = plugin.getVisibleFavSlots();
 		for (int i = 0; i < visibleSlots; i++)
 		{
@@ -738,6 +1069,13 @@ class MapDecoratorPanel extends PluginPanel
 		addSlotBtn.setVisible(visibleSlots < MAX_FAV_SLOTS);
 		refreshFavouriteButtons();
 		favsRows.revalidate();
+		favsSection.setExpanded(plugin.getFavouritesExpanded());
+		savesSection.setExpanded(plugin.getSavesExpanded());
+		refreshSavesRows();
+		snapChk.setSelected(plugin.getSnapEnabled());
+		boolean randomEnabled = plugin.getRandomEnabled();
+		randomChk.setSelected(randomEnabled);
+		setGeometryControlsEnabled(!randomEnabled);
 		applyTooltipDelay(this);
 		onObjectIdChanged();
 	}
@@ -804,7 +1142,7 @@ class MapDecoratorPanel extends PluginPanel
 			return;
 		}
 		addFavouriteRow(visibleSlots);
-		Favourite[] favs = plugin.getFavourites();
+		Favourite[] favs = plugin.getFavourites(visibleSlots + 1);
 		applyFavToButton(slotButtons.get(visibleSlots), favs[visibleSlots]);
 		visibleSlots++;
 		plugin.setVisibleFavSlots(visibleSlots);
@@ -894,6 +1232,28 @@ class MapDecoratorPanel extends PluginPanel
 		scaleSpinner.setValue(Math.max(-100, Math.min(100, scale)));
 	}
 
+	boolean getSelectedMirror()
+	{
+		return selectedMirror;
+	}
+
+	void setMirror(boolean mirror)
+	{
+		selectedMirror = mirror;
+		mirrorChk.setSelected(mirror);
+	}
+
+	int getSelectedTintArgb()
+	{
+		return selectedTintArgb;
+	}
+
+	void setTintArgb(int argb)
+	{
+		selectedTintArgb = argb;
+		applyTintSwatch(tintSwatch);
+	}
+
 	boolean getSelectedRoam()
 	{
 		return selectedRoam;
@@ -909,7 +1269,8 @@ class MapDecoratorPanel extends PluginPanel
 	PanelSelection snapshotSelection()
 	{
 		return new PanelSelection(selectedObjectId, selectedNpcId, selectedAnimationId, selectedOrientation,
-			selectedHeightOffset, selectedOffsetX, selectedOffsetY, selectedScale, selectedRoam);
+			selectedHeightOffset, selectedOffsetX, selectedOffsetY, selectedScale, selectedRoam,
+			selectedMirror, selectedTintArgb);
 	}
 
 	/** Restores a selection snapshot, same ordering rules as favourite/edit loads. */
@@ -926,6 +1287,29 @@ class MapDecoratorPanel extends PluginPanel
 		setOffset(sel.getOffsetX(), sel.getOffsetY());
 		setScale(sel.getScale());
 		setRoam(sel.isRoam());
+		setMirror(sel.isMirror());
+		setTintArgb(sel.getTintArgb());
+		refreshPreviewAndGhost();
+	}
+
+	/** Resets offset, scale, rotation, height, tint and mirror back to defaults; leaves the object/NPC/animation alone. */
+	private void clearGeometry()
+	{
+		PanelSelection before = snapshotSelection();
+		offsetXSpinner.setValue(0);
+		offsetYSpinner.setValue(0);
+		heightSpinner.setValue(0);
+		rotationSpinner.setValue(0);
+		scaleSpinner.setValue(0);
+		setMirror(false);
+		setTintArgb(0x00C83C3C);
+		refreshPreviewAndGhost();
+		applyEditIfActive();
+		PanelSelection after = snapshotSelection();
+		if (plugin != null && !after.equals(before))
+		{
+			plugin.recordSelectionAction(before, after);
+		}
 	}
 
 	// â”€â”€ Favourite helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -936,7 +1320,7 @@ class MapDecoratorPanel extends PluginPanel
 		{
 			return;
 		}
-		Favourite[] favs = plugin.getFavourites();
+		Favourite[] favs = plugin.getFavourites(slotButtons.size());
 		for (int i = 0; i < slotButtons.size(); i++)
 		{
 			applyFavToButton(slotButtons.get(i), favs[i]);
@@ -964,7 +1348,7 @@ class MapDecoratorPanel extends PluginPanel
 		{
 			return;
 		}
-		Favourite[] favs = plugin.getFavourites();
+		Favourite[] favs = plugin.getFavourites(slot + 1);
 		Favourite fav = favs[slot];
 		if (fav != null)
 		{
@@ -973,7 +1357,7 @@ class MapDecoratorPanel extends PluginPanel
 			PanelSelection before = snapshotSelection();
 			applySelection(new PanelSelection(fav.getObjectId(), fav.getNpcId(), fav.getAnimationId(),
 				fav.getOrientation(), fav.getHeightOffset(), fav.getOffsetX(), fav.getOffsetY(),
-				fav.getScale(), fav.isRoam()));
+				fav.getScale(), fav.isRoam(), fav.isMirror(), fav.getTintArgb()));
 			PanelSelection after = snapshotSelection();
 			if (!after.equals(before))
 			{
@@ -989,7 +1373,7 @@ class MapDecoratorPanel extends PluginPanel
 			return;
 		}
 		int id = getSelectedObjectId();
-		Favourite[] favs = plugin.getFavourites();
+		Favourite[] favs = plugin.getFavourites(slot + 1);
 		String defaultName;
 		if (favs[slot] != null)
 		{
@@ -1011,7 +1395,8 @@ class MapDecoratorPanel extends PluginPanel
 		}
 		// The full recipe, so a tuned decoration (height, nudge, size and all) is one click away
 		Favourite fav = new Favourite(id, name.trim(), selectedAnimationId, selectedNpcId,
-			selectedOrientation, selectedHeightOffset, selectedOffsetX, selectedOffsetY, selectedScale, selectedRoam);
+			selectedOrientation, selectedHeightOffset, selectedOffsetX, selectedOffsetY, selectedScale, selectedRoam,
+			selectedMirror, selectedTintArgb);
 		plugin.setFavourite(slot, fav);
 		applyFavToButton(slotButtons.get(slot), fav);
 		updateFavCount();
@@ -1024,10 +1409,35 @@ class MapDecoratorPanel extends PluginPanel
 			return;
 		}
 		JPopupMenu menu = new JPopupMenu();
+		JMenuItem rename = new JMenuItem("Rename");
+		rename.addActionListener(ev -> renameFavourite(slot));
 		JMenuItem remove = new JMenuItem("Remove");
 		remove.addActionListener(ev -> removeSlotAndRebuild(slot));
+		menu.add(rename);
 		menu.add(remove);
 		menu.show(e.getComponent(), e.getX(), e.getY());
+	}
+
+	private void renameFavourite(int slot)
+	{
+		if (plugin == null)
+		{
+			return;
+		}
+		Favourite[] favs = plugin.getFavourites(slot + 1);
+		Favourite fav = favs[slot];
+		if (fav == null)
+		{
+			return;
+		}
+		String name = JOptionPane.showInputDialog(this, "Rename this favourite:", fav.getName());
+		if (name == null || name.trim().isEmpty())
+		{
+			return;
+		}
+		fav.setName(name.trim());
+		plugin.setFavourite(slot, fav);
+		applyFavToButton(slotButtons.get(slot), fav);
 	}
 
 	private void removeSlotAndRebuild(int slot)
@@ -1057,7 +1467,7 @@ class MapDecoratorPanel extends PluginPanel
 		{
 			return;
 		}
-		Favourite[] favs = plugin.getFavourites();
+		Favourite[] favs = plugin.getFavourites(visibleSlots);
 		int count = 0;
 		for (Favourite f : favs)
 		{
@@ -1392,13 +1802,179 @@ class MapDecoratorPanel extends PluginPanel
 		int id = selectedObjectId;
 		int npcId = selectedNpcId;
 		int scale = selectedScale;
-		clientThread.invoke(() ->
+		boolean mirror = selectedMirror;
+		int tint = selectedTintArgb;
+		long generation = previewRequestGeneration.incrementAndGet();
+		// Retries while the model is still loading (a first-visit id usually isn't in the game's
+		// cache yet), and drops the request entirely once a newer selection supersedes it â€” so
+		// scrolling through ids can neither blank out on a cold load nor paint a stale model.
+		// Loaded once and reused for the preview, cursor ghost, and Be Object stand-in â€” each is
+		// a merge+scale+tint pass, not worth repeating three times per change.
+		plugin.withDecorationModel(id, npcId, scale, mirror, tint,
+			() -> previewRequestGeneration.get() != generation,
+			md ->
+			{
+				preview.setModel(md);
+				plugin.applyGhostModel(md, npcId);
+				plugin.applyBeObjectModel(md, npcId);
+			});
+	}
+
+	// â”€â”€ Saves (named export/import codes) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+	/** After an export/import completes, offers to keep this code as a named save for later. */
+	void promptSaveLayout(String code, String defaultName)
+	{
+		JTextField nameField = new JTextField(defaultName);
+		JPanel message = new JPanel(new BorderLayout(0, 6));
+		message.add(new JLabel("Save this layout for later?"), BorderLayout.NORTH);
+		message.add(nameField, BorderLayout.CENTER);
+
+		int result = JOptionPane.showOptionDialog(this, message, "Save layout",
+			JOptionPane.YES_NO_OPTION, JOptionPane.PLAIN_MESSAGE, null,
+			new Object[]{"Save", "Don't Save"}, "Don't Save");
+		if (result != 0)
 		{
-			ModelData md = plugin.loadDecorationModelData(id, npcId, scale);
-			plugin.updateGhostModel(id, npcId, scale);
-			preview.setModel(md);
+			return;
+		}
+		String name = nameField.getText().trim();
+		if (name.isEmpty() || plugin == null)
+		{
+			return;
+		}
+		if (!plugin.addSavedLayout(name, code))
+		{
+			JOptionPane.showMessageDialog(this, "You've hit the save limit â€” remove one first.");
+			return;
+		}
+		refreshSavesRows();
+	}
+
+	private void refreshSavesRows()
+	{
+		savesRows.removeAll();
+		if (plugin != null)
+		{
+			List<SavedLayout> layouts = plugin.getSavedLayouts();
+			if (layouts.isEmpty())
+			{
+				JLabel empty = new JLabel("â€” no saved layouts yet â€”");
+				empty.setForeground(SLOT_EMPTY_FG);
+				empty.setFont(FontManager.getRunescapeSmallFont());
+				empty.setAlignmentX(Component.LEFT_ALIGNMENT);
+				savesRows.add(empty);
+			}
+			else
+			{
+				for (int i = 0; i < layouts.size(); i++)
+				{
+					savesRows.add(createSaveRow(i, layouts.get(i)));
+					savesRows.add(Box.createVerticalStrut(3));
+				}
+			}
+		}
+		savesRows.revalidate();
+		savesRows.repaint();
+	}
+
+	private JButton createSaveRow(int index, SavedLayout layout)
+	{
+		JButton btn = new JButton(layout.getName());
+		btn.setToolTipText("Left-click for options, right-click to rename or remove");
+		btn.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+		btn.setForeground(SLOT_FILLED_FG);
+		btn.setFont(FontManager.getRunescapeSmallFont());
+		btn.setBorderPainted(false);
+		btn.setFocusPainted(false);
+		btn.setHorizontalAlignment(SwingConstants.LEFT);
+		btn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
+		btn.setAlignmentX(Component.LEFT_ALIGNMENT);
+		btn.addActionListener(e -> showSaveActionMenu(btn, index));
+		btn.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mousePressed(MouseEvent e)
+			{
+				if (e.isPopupTrigger())
+				{
+					showSaveManageMenu(e, index);
+				}
+			}
+
+			@Override
+			public void mouseReleased(MouseEvent e)
+			{
+				if (e.isPopupTrigger())
+				{
+					showSaveManageMenu(e, index);
+				}
+			}
 		});
-		plugin.updateBeObjectModel();
+		return btn;
+	}
+
+	/** Left-click menu: act on this saved code right now. */
+	private void showSaveActionMenu(Component invoker, int index)
+	{
+		if (plugin == null)
+		{
+			return;
+		}
+		List<SavedLayout> layouts = plugin.getSavedLayouts();
+		if (index >= layouts.size())
+		{
+			return;
+		}
+		SavedLayout layout = layouts.get(index);
+		JPopupMenu menu = new JPopupMenu();
+		JMenuItem copy = new JMenuItem("Copy to clipboard");
+		copy.addActionListener(e ->
+		{
+			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(layout.getCode()), null);
+			JOptionPane.showMessageDialog(this, "Copied to your clipboard.");
+		});
+		JMenuItem importNow = new JMenuItem("Import into game now");
+		importNow.addActionListener(e -> plugin.importCode(layout.getCode()));
+		menu.add(copy);
+		menu.add(importNow);
+		menu.show(invoker, 0, invoker.getHeight());
+	}
+
+	/** Right-click menu: manage the saved entry itself. */
+	private void showSaveManageMenu(MouseEvent e, int index)
+	{
+		if (plugin == null)
+		{
+			return;
+		}
+		JPopupMenu menu = new JPopupMenu();
+		JMenuItem rename = new JMenuItem("Rename");
+		rename.addActionListener(ev -> renameSave(index));
+		JMenuItem remove = new JMenuItem("Remove");
+		remove.addActionListener(ev ->
+		{
+			plugin.removeSavedLayout(index);
+			refreshSavesRows();
+		});
+		menu.add(rename);
+		menu.add(remove);
+		menu.show(e.getComponent(), e.getX(), e.getY());
+	}
+
+	private void renameSave(int index)
+	{
+		List<SavedLayout> layouts = plugin.getSavedLayouts();
+		if (index >= layouts.size())
+		{
+			return;
+		}
+		String name = JOptionPane.showInputDialog(this, "Rename this layout:", layouts.get(index).getName());
+		if (name == null || name.trim().isEmpty())
+		{
+			return;
+		}
+		plugin.renameSavedLayout(index, name.trim());
+		refreshSavesRows();
 	}
 
 	// â”€â”€ Scrollable controls container â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1438,6 +2014,75 @@ class MapDecoratorPanel extends PluginPanel
 		public boolean getScrollableTracksViewportHeight()
 		{
 			return false;
+		}
+	}
+
+	// â”€â”€ Collapsible section header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+	/** A clickable header with a chevron that shows/hides a body component below it. */
+	private static final class CollapsibleSection
+	{
+		final JPanel header;
+		private final JLabel chevron;
+		private final JComponent body;
+		private Runnable onToggle = () -> {};
+
+		CollapsibleSection(String title, String tooltip, JComponent body)
+		{
+			this.body = body;
+
+			chevron = new JLabel(body.isVisible() ? "-" : "+");
+			chevron.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+			chevron.setFont(FontManager.getRunescapeSmallFont());
+
+			JLabel titleLabel = new JLabel(title);
+			titleLabel.setForeground(ColorScheme.BRAND_ORANGE);
+			titleLabel.setFont(FontManager.getRunescapeBoldFont());
+
+			header = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+			header.setBackground(ColorScheme.DARK_GRAY_COLOR);
+			header.setAlignmentX(Component.LEFT_ALIGNMENT);
+			header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
+			header.setBorder(new MatteBorder(0, 0, 1, 0, ColorScheme.MEDIUM_GRAY_COLOR));
+			header.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+			header.setToolTipText(tooltip);
+			chevron.setToolTipText(tooltip);
+			titleLabel.setToolTipText(tooltip);
+			header.add(chevron);
+			header.add(titleLabel);
+
+			// Clicks land on whichever child is under the cursor (chevron or title text cover
+			// almost the whole header), so the listener has to be on all three, not just header.
+			MouseAdapter click = new MouseAdapter()
+			{
+				@Override
+				public void mouseClicked(MouseEvent e)
+				{
+					setExpanded(!body.isVisible());
+					onToggle.run();
+				}
+			};
+			header.addMouseListener(click);
+			chevron.addMouseListener(click);
+			titleLabel.addMouseListener(click);
+		}
+
+		void setExpanded(boolean expanded)
+		{
+			body.setVisible(expanded);
+			chevron.setText(expanded ? "-" : "+");
+			body.revalidate();
+			body.repaint();
+		}
+
+		boolean isExpanded()
+		{
+			return body.isVisible();
+		}
+
+		void setOnToggle(Runnable onToggle)
+		{
+			this.onToggle = onToggle;
 		}
 	}
 }
