@@ -111,6 +111,18 @@ public class MapDecoratorPlugin extends Plugin
 
 	/** Active RuneLiteObjects in instanced regions (POH), keyed by scene tile. */
 	private final Map<InstancedObject, RuneLiteObject> activeInstancedObjects = new HashMap<>();
+	/**
+	 * True once the saved house layout has been read into activeInstancedObjects for the current
+	 * scene. Saving writes the whole in-memory map, so until this is set a save would overwrite
+	 * the stored layout with whatever little was placed since entering.
+	 */
+	private boolean instancedLoaded;
+	/**
+	 * Set on LOGGED_IN and scene unload so the next game ticks retry the house load. At LOGGED_IN itself the
+	 * player's position can still be stale from the previous scene (isInPoh fails) and rooms
+	 * may not resolve yet, so a load there alone misses on re-entry.
+	 */
+	private boolean instancedLoadPending;
 
 	private RuneLiteObject ghostObject;
 	private boolean ghostEnabled;
@@ -192,7 +204,28 @@ public class MapDecoratorPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
+		tickPendingInstancedLoad();
 		tickInstancedVisibility();
+	}
+
+	private void tickPendingInstancedLoad()
+	{
+		if (!instancedLoadPending)
+		{
+			return;
+		}
+		WorldView wv = client.getTopLevelWorldView();
+		if (wv == null || !wv.isInstance())
+		{
+			instancedLoadPending = false;
+			return;
+		}
+		// Other instances stay pending (cheap check) in case the position was just stale
+		if (isInPoh())
+		{
+			instancedLoadPending = false;
+			loadInstancedObjects();
+		}
 	}
 
 	// â”€â”€ Roaming npcs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -826,12 +859,19 @@ public class MapDecoratorPlugin extends Plugin
 			despawn(rlo);
 		}
 		activeInstancedObjects.clear();
+		instancedLoaded = false;
+		instancedLoadPending = true;
 	}
 
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged event)
 	{
-		if (event.getGameState() == GameState.LOGGED_IN && isInPoh())
+		if (event.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+		instancedLoadPending = true;
+		if (isInPoh())
 		{
 			loadInstancedObjects();
 		}
@@ -1610,6 +1650,8 @@ public class MapDecoratorPlugin extends Plugin
 				despawn(rlo);
 			}
 			activeInstancedObjects.clear();
+			instancedLoaded = false;
+			instancedLoadPending = false;
 		});
 	}
 
@@ -2296,6 +2338,8 @@ public class MapDecoratorPlugin extends Plugin
 		}
 		if (json == null || json.isEmpty())
 		{
+			// Nothing stored, so nothing a save could clobber
+			instancedLoaded = true;
 			return;
 		}
 		try
@@ -2303,6 +2347,7 @@ public class MapDecoratorPlugin extends Plugin
 			JsonArray array = gson.fromJson(json, JsonArray.class);
 			if (array == null || array.size() == 0)
 			{
+				instancedLoaded = true;
 				return;
 			}
 
@@ -2339,6 +2384,7 @@ public class MapDecoratorPlugin extends Plugin
 				activeInstancedObjects.put(obj, null);
 				spawnInstancedObject(obj);
 			}
+			instancedLoaded = true;
 			if (legacyFormat || migratedFromNameKey)
 			{
 				// Persist immediately under the current key/format so each migration only ever runs once
@@ -2444,6 +2490,11 @@ public class MapDecoratorPlugin extends Plugin
 
 	private void saveInstancedObjects()
 	{
+		if (!instancedLoaded)
+		{
+			// The stored layout isn't in memory yet; writing now would replace it with a partial one
+			return;
+		}
 		long accountHash = client.getAccountHash();
 		if (accountHash <= 0)
 		{
