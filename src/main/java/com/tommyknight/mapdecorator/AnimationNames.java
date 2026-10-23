@@ -90,7 +90,7 @@ final class AnimationNames
 	/**
 	 * Animation ids with a known scenery model (see {@link #modelFor}), matched against either the
 	 * animation's own gameval constant name OR its paired object's human name (via {@link ObjectModelNames}).
-	 * The constant names are things like "FIREBIRD_WALK" — rarely what someone would type — so matching
+	 * The constant names are things like "FIREBIRD_WALK" - rarely what someone would type - so matching
 	 * the paired object's name too means searching "fire" actually finds fire animations. Displays the
 	 * object name when known (falling back to the constant name), ranked prefix-matches-first then by
 	 * display length, capped at {@code limit} results.

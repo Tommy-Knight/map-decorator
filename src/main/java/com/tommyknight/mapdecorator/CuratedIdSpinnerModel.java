@@ -4,10 +4,10 @@ import java.util.List;
 import javax.swing.AbstractSpinnerModel;
 
 /**
- * Spinner model that cycles only through a curated, sorted list of ids â€” so arrow-key/button
+ * Spinner model that cycles only through a curated, sorted list of ids - so arrow-key/button
  * stepping jumps between actually-known entries (a named object, an animation with a model)
  * instead of every raw integer, most of which are unnamed junk between real ones. The value can
- * still be set to any integer via {@link #setValue} â€” manual entry, search selection, favourites,
+ * still be set to any integer via {@link #setValue} - manual entry, search selection, favourites,
  * and restoring a previously placed object/animation must all keep working even for ids outside
  * the curated list.
  *
@@ -57,7 +57,7 @@ class CuratedIdSpinnerModel extends AbstractSpinnerModel
 			}
 		}
 		// Past the last known id (or value is some stale/unrecognised number above them all,
-		// e.g. from an old favourite) â€” wrap to the floor/start instead of permanently disabling
+		// e.g. from an old favourite) - wrap to the floor/start instead of permanently disabling
 		// the up arrow.
 		return floor != null ? floor : knownIds.get(0);
 	}
@@ -87,7 +87,7 @@ class CuratedIdSpinnerModel extends AbstractSpinnerModel
 			return candidate;
 		}
 		// value is below every known id (or a stale/unrecognised number smaller than all of
-		// them) â€” step to the floor/end rather than disabling the down arrow.
+		// them) - step to the floor/end rather than disabling the down arrow.
 		return floor != null ? floor : knownIds.get(knownIds.size() - 1);
 	}
 }

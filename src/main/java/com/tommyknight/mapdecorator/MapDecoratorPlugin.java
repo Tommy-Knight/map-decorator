@@ -88,7 +88,7 @@ public class MapDecoratorPlugin extends Plugin
 	static final String CONFIG_GROUP = "mapDecorator";
 	private static final String REGION_PREFIX = "region_";
 
-	// Gson list types, resolved once â€” each `new TypeToken<...>(){}` is an anonymous class
+	// Gson list types, resolved once - each `new TypeToken<...>(){}` is an anonymous class
 	private static final Type PLACED_OBJECT_LIST = new TypeToken<List<PlacedObject>>() {}.getType();
 	private static final Type INSTANCED_OBJECT_LIST = new TypeToken<List<InstancedObject>>() {}.getType();
 	private static final Type SAVED_LAYOUT_LIST = new TypeToken<List<SavedLayout>>() {}.getType();
@@ -179,7 +179,7 @@ public class MapDecoratorPlugin extends Plugin
 		});
 	}
 
-	// â”€â”€ Cursor ghost â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Cursor ghost ──────────────────────────────────────────────────────
 
 	@Subscribe
 	public void onClientTick(ClientTick event)
@@ -195,7 +195,7 @@ public class MapDecoratorPlugin extends Plugin
 		tickInstancedVisibility();
 	}
 
-	// â”€â”€ Roaming npcs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Roaming npcs ──────────────────────────────────────────────────────
 
 	// Walk speed of one tile (128 local units) per 0.6s game tick, in local units per ~20ms client tick
 	private static final int ROAM_STEP_UNITS = 4;
@@ -244,7 +244,7 @@ public class MapDecoratorPlugin extends Plugin
 	 * path goes through here so a Roamer can't outlive the object it animates.
 	 * <p>
 	 * This used to be a per-tick sweep over the active-object maps instead, which was both a
-	 * linear scan fifty times a second and â€” because it only ever consulted the instanced map â€”
+	 * linear scan fifty times a second and - because it only ever consulted the instanced map -
 	 * silently culled every overworld roamer on the tick after it spawned, so Roam did nothing
 	 * outside a house.
 	 */
@@ -312,7 +312,7 @@ public class MapDecoratorPlugin extends Plugin
 		{
 			return;
 		}
-		// While editing a placed object the panel controls drive that object, not the ghost â€”
+		// While editing a placed object the panel controls drive that object, not the ghost -
 		// a second model tracking the cursor with the same values would only mislead.
 		if (isEditing())
 		{
@@ -331,7 +331,7 @@ public class MapDecoratorPlugin extends Plugin
 			return;
 		}
 		// Once the right-click menu is open, the mouse is over the menu itself, not the game
-		// world â€” recomputing the cursor offset against menu coordinates would make the ghost
+		// world - recomputing the cursor offset against menu coordinates would make the ghost
 		// jitter around the tile instead of holding still while the menu is navigated.
 		if (client.isMenuOpen())
 		{
@@ -624,7 +624,7 @@ public class MapDecoratorPlugin extends Plugin
 	 * later ticks for as long as the game hasn't finished pulling it out of its cache.
 	 * <p>
 	 * {@link #loadDecorationModelData} returns null both for an id that genuinely has no model
-	 * and for one the game simply hasn't loaded yet â€” and the second case is the common one the
+	 * and for one the game simply hasn't loaded yet - and the second case is the common one the
 	 * first time an id is used, because the request itself is what triggers the load. Giving up
 	 * after a single attempt is what leaves a blank preview or a decoration that never spawns,
 	 * so keep asking for a few ticks before concluding the id has nothing behind it.
@@ -787,7 +787,7 @@ public class MapDecoratorPlugin extends Plugin
 		}
 	}
 
-	// â”€â”€ Region loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Region loading ────────────────────────────────────────────────────
 
 	@Subscribe
 	public void onWorldViewLoaded(WorldViewLoaded event)
@@ -808,7 +808,7 @@ public class MapDecoratorPlugin extends Plugin
 		{
 			endEdit();
 		}
-		// Instanced undo history references this house's scene tiles â€” meaningless once it unloads.
+		// Instanced undo history references this house's scene tiles - meaningless once it unloads.
 		// Overworld actions survive: they re-apply through region config, loaded or not.
 		undoStack.removeIf(UndoAction::isInstanced);
 		redoStack.removeIf(UndoAction::isInstanced);
@@ -820,7 +820,7 @@ public class MapDecoratorPlugin extends Plugin
 		loadedObjects.removeAll(wv);
 		// Roamers hold scene-local coordinates that die with the scene
 		roamers.clear();
-		// Clear instanced objects â€” reloaded on GameStateChanged if re-entering instance
+		// Clear instanced objects - reloaded on GameStateChanged if re-entering instance
 		for (RuneLiteObject rlo : activeInstancedObjects.values())
 		{
 			despawn(rlo);
@@ -874,7 +874,7 @@ public class MapDecoratorPlugin extends Plugin
 		{
 			return;
 		}
-		// Hashed rather than scanning the worldview's list per candidate â€” PlacedObject's equality
+		// Hashed rather than scanning the worldview's list per candidate - PlacedObject's equality
 		// is its position and stack index, which is exactly the "already loaded?" question here.
 		// The set tracks additions too, so a region listed twice can't spawn a duplicate.
 		Set<PlacedObject> current = new HashSet<>(loadedObjects.get(wv));
@@ -891,7 +891,7 @@ public class MapDecoratorPlugin extends Plugin
 		}
 	}
 
-	// â”€â”€ Placement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Placement ─────────────────────────────────────────────────────────
 
 	@Subscribe
 	public void onMenuEntryAdded(MenuEntryAdded event)
@@ -919,7 +919,7 @@ public class MapDecoratorPlugin extends Plugin
 		{
 			return;
 		}
-		// Captured now, before the context menu appears and the cursor moves onto it â€”
+		// Captured now, before the context menu appears and the cursor moves onto it -
 		// this is the last point at which the mouse position still reflects where the
 		// player actually right-clicked in the game world.
 		Point clickPos = client.getMouseCanvasPosition();
@@ -948,7 +948,7 @@ public class MapDecoratorPlugin extends Plugin
 					.setType(MenuAction.RUNELITE)
 					.onClick(e -> startEditInstanced(wv, obj));
 			}
-			// While editing, the panel controls belong to the edited object â€” placing a copy
+			// While editing, the panel controls belong to the edited object - placing a copy
 			// mid-edit is almost never what was meant, so the option is hidden until Done.
 			if (atTile.size() < 3 && !isEditing())
 			{
@@ -1086,7 +1086,7 @@ public class MapDecoratorPlugin extends Plugin
 	 * Resolves where within the tile the player actually clicked, as an offsetX/offsetY pair in
 	 * the same units as the panel's offset spinners (range -64..64, 128 = one full tile). Treats
 	 * the tile's projected screen quad as a parallelogram (using its origin corner and two edge
-	 * vectors) rather than solving a true perspective-correct inverse â€” at OSRS's typical camera
+	 * vectors) rather than solving a true perspective-correct inverse - at OSRS's typical camera
 	 * pitch/zoom the difference is negligible for a tile-sized area, and this avoids the
 	 * degenerate-quad/root-selection edge cases a full bilinear inverse would need. Returns null
 	 * if the tile isn't currently projectable (e.g. off-screen), so callers fall back to the
@@ -1138,7 +1138,7 @@ public class MapDecoratorPlugin extends Plugin
 		recordOverworldAction(List.of(obj), List.of());
 	}
 
-	// â”€â”€ Undo / redo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Undo / redo ───────────────────────────────────────────────────────
 
 	private static final int MAX_UNDO = 50;
 
@@ -1349,7 +1349,7 @@ public class MapDecoratorPlugin extends Plugin
 		});
 	}
 
-	// â”€â”€ Editing placed objects â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Editing placed objects ────────────────────────────────────────────
 
 	// Object being edited via the panel controls; at most one of the two targets is non-null.
 	// The originals are what the object looked like when the edit began, for Cancel.
@@ -1460,7 +1460,7 @@ public class MapDecoratorPlugin extends Plugin
 		InstancedObject instCur = editInstancedTarget;
 		InstancedObject instOriginal = editInstancedOriginal;
 		WorldView wv = editWorldView;
-		// Cancel reverts, so nothing is recorded for undo â€” clear without recording
+		// Cancel reverts, so nothing is recorded for undo - clear without recording
 		clearEditState();
 
 		if (cur != null && original != null && wv != null)
@@ -1502,7 +1502,7 @@ public class MapDecoratorPlugin extends Plugin
 		}
 	}
 
-	/** Applies the panel's current values to the object being edited â€” live in the scene and persisted. */
+	/** Applies the panel's current values to the object being edited - live in the scene and persisted. */
 	void applyEditFromPanel()
 	{
 		int objectId = panel.getSelectedObjectId();
@@ -1551,7 +1551,7 @@ public class MapDecoratorPlugin extends Plugin
 		});
 	}
 
-	// â”€â”€ RuneLiteObject management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── RuneLiteObject management ─────────────────────────────────────────
 
 	private void spawnObject(WorldView wv, PlacedObject obj)
 	{
@@ -1613,7 +1613,7 @@ public class MapDecoratorPlugin extends Plugin
 		});
 	}
 
-	// â”€â”€ Persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Persistence ───────────────────────────────────────────────────────
 
 	private void saveRegion(int regionId, WorldView wv)
 	{
@@ -1654,14 +1654,14 @@ public class MapDecoratorPlugin extends Plugin
 		}
 	}
 
-	// â”€â”€ Sharing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Sharing ───────────────────────────────────────────────────────────
 
 	private static final int SHARE_RADIUS = 100;
 
 	/**
 	 * Copies decorations to the clipboard as a Base64 code: every placed object within
 	 * SHARE_RADIUS tiles of the player normally, or the player's entire current house layout
-	 * while standing in a POH (a house has no useful "radius" â€” the whole thing is already
+	 * while standing in a POH (a house has no useful "radius" - the whole thing is already
 	 * what's loaded).
 	 */
 	void exportNearby()
@@ -1748,7 +1748,7 @@ public class MapDecoratorPlugin extends Plugin
 	 * Reads a code from the clipboard (see exportNearby/exportInstanced) and merges its objects
 	 * into the current world or house. A house code only ever lands in whichever house the
 	 * importer is currently standing in, and only into rooms whose furniture actually matches
-	 * the exporter's â€” a friend with a differently laid-out house will see nothing (or only a
+	 * the exporter's - a friend with a differently laid-out house will see nothing (or only a
 	 * partial match) until they build matching rooms, the same graceful no-op used everywhere
 	 * else in this plugin for "not part of the current layout yet."
 	 */
@@ -1945,7 +1945,7 @@ public class MapDecoratorPlugin extends Plugin
 	 * Merges a house layout code (see importFromClipboard) into the current house. Each
 	 * incoming object's stable room identity is matched against the current house exactly as
 	 * spawnInstancedObject already does: it only ever lands in a room whose furniture matches,
-	 * and only in whichever house the importer happens to be standing in right now â€” importing
+	 * and only in whichever house the importer happens to be standing in right now - importing
 	 * a friend's code never touches their house, or any house besides this one.
 	 */
 	private void importInstanced(JsonArray array, String code)
@@ -1985,7 +1985,7 @@ public class MapDecoratorPlugin extends Plugin
 				InstancedObject incoming = sanitizeScale(rawIncoming);
 				// occurrence is relative to however many rooms shared that template in the
 				// exporter's house. If this house has fewer, don't let it clamp onto the wrong
-				// room (see resolveLiveInstancedPoint) â€” treat it as "not part of this layout."
+				// room (see resolveLiveInstancedPoint) - treat it as "not part of this layout."
 				int matchesHere = WorldPoint.toLocalInstance(wv, incoming.toWorldPoint()).size();
 				if (incoming.getOccurrence() >= matchesHere)
 				{
@@ -2050,11 +2050,11 @@ public class MapDecoratorPlugin extends Plugin
 		});
 	}
 
-	// â”€â”€ Instanced region (POH) support â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Instanced region (POH) support ───────────────────────────────────
 
 	private void placeInstancedObject(Tile tile, Point clickPos)
 	{
-		// Snapshotted for the same reason as placeObject's â€” the load below may defer this.
+		// Snapshotted for the same reason as placeObject's - the load below may defer this.
 		int objectId = panel.getSelectedObjectId();
 		int npcId = panel.getSelectedNpcId();
 		int scale = panel.getSelectedScale();
@@ -2170,7 +2170,7 @@ public class MapDecoratorPlugin extends Plugin
 
 	/**
 	 * Resolves the room's stable identity to wherever it currently renders this session.
-	 * Null means that room isn't part of the current layout â€” it respawns once rebuilt, same
+	 * Null means that room isn't part of the current layout - it respawns once rebuilt, same
 	 * as an overworld object waiting for its region to reload. If another room shares this
 	 * exact template, sorts the matches the same deterministic way as at placement time and
 	 * picks this object's own recorded occurrence.
@@ -2187,7 +2187,7 @@ public class MapDecoratorPlugin extends Plugin
 	}
 
 	/**
-	 * POH floors share a single scene, stacked at the same scene footprint â€” without this, an
+	 * POH floors share a single scene, stacked at the same scene footprint - without this, an
 	 * object placed upstairs renders at its correct (much higher) height regardless of which
 	 * floor the player is currently standing on, so it bleeds through into the room stacked
 	 * beneath it. Hides every instanced object whose current room isn't on the player's plane.
@@ -2328,9 +2328,9 @@ public class MapDecoratorPlugin extends Plugin
 			}
 			for (InstancedObject obj : list)
 			{
-				// LOGGED_IN fires on every scene rebuild in the house â€” don't respawn objects
+				// LOGGED_IN fires on every scene rebuild in the house - don't respawn objects
 				// that are already live. A present-but-null entry means a previous attempt
-				// couldn't find its room yet (not built at the time) â€” retry those, since the
+				// couldn't find its room yet (not built at the time) - retry those, since the
 				// room may exist now.
 				if (activeInstancedObjects.get(obj) != null)
 				{
@@ -2500,7 +2500,7 @@ public class MapDecoratorPlugin extends Plugin
 		return stackIndex == 0 ? "Object" : "Object " + (stackIndex + 1);
 	}
 
-	// â”€â”€ Preview background â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Preview background ────────────────────────────────────────────────
 
 	String getPreviewBackground()
 	{
@@ -2512,7 +2512,7 @@ public class MapDecoratorPlugin extends Plugin
 		configManager.setConfiguration(CONFIG_GROUP, "preview_bg", name);
 	}
 
-	// â”€â”€ Favourites â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Favourites ────────────────────────────────────────────────────────
 
 	static final int MAX_FAV_SLOTS = 256;
 
@@ -2618,7 +2618,7 @@ public class MapDecoratorPlugin extends Plugin
 		configManager.setConfiguration(CONFIG_GROUP, "random_enabled", String.valueOf(enabled));
 	}
 
-	// â”€â”€ Saves (named export/import codes, kept for later) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Saves (named export/import codes, kept for later) ────────────────
 
 	private static final int MAX_SAVED_LAYOUTS = 256;
 
@@ -2691,7 +2691,7 @@ public class MapDecoratorPlugin extends Plugin
 		setSavedLayouts(layouts);
 	}
 
-	// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Helpers ───────────────────────────────────────────────────────────
 
 	/** Average colors of game textures, keyed by texture id. Written only on the client thread. */
 	private final Map<Integer, Integer> textureAvgCache = new HashMap<>();

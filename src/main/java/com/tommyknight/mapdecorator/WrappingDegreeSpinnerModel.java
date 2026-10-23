@@ -7,8 +7,8 @@ import javax.swing.SpinnerNumberModel;
  * object continuously through full revolutions rather than sticking at 0 or 360.
  *
  * 360 is the same heading as 0, so stepping up from 359 lands on 0 rather than showing the same
- * angle twice. 360 stays a legal value â€” {@code orientationToDeg} rounds the topmost orientations
- * up to it â€” it just isn't a stop the arrows produce on their way round.
+ * angle twice. 360 stays a legal value - {@code orientationToDeg} rounds the topmost orientations
+ * up to it - it just isn't a stop the arrows produce on their way round.
  */
 class WrappingDegreeSpinnerModel extends SpinnerNumberModel
 {

@@ -117,7 +117,7 @@ class MapDecoratorPanel extends PluginPanel
 	// already-superseded model over whatever's actually selected now.
 	private final AtomicLong previewRequestGeneration = new AtomicLong();
 
-	// Set while a placed object is bound to the controls (right-click â†’ Edit); every control
+	// Set while a placed object is bound to the controls (right-click → Edit); every control
 	// change is then applied to that object live instead of just the ghost.
 	private volatile boolean editing = false;
 	private final JPanel editBanner;
@@ -145,14 +145,14 @@ class MapDecoratorPanel extends PluginPanel
 		setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 		setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-		// â”€â”€ Preview (very top) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+		// ── Preview (very top) ────────────────────────────────────────────
 		JPanel previewWrapper = new JPanel(new BorderLayout(0, 4));
 		previewWrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		previewWrapper.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
-		preview.setToolTipText("Drag to rotate â€¢ Scroll to zoom â€¢ Right-drag to pan");
+		preview.setToolTipText("Drag to rotate • Scroll to zoom • Right-drag to pan");
 		previewWrapper.add(preview, BorderLayout.CENTER);
 
-		// Edit banner â€” shown while a placed object is bound to the controls
+		// Edit banner - shown while a placed object is bound to the controls
 		editLabel = new JLabel();
 		editLabel.setForeground(STAR_COLOR);
 		editLabel.setFont(FontManager.getRunescapeSmallFont());
@@ -200,11 +200,11 @@ class MapDecoratorPanel extends PluginPanel
 		editBanner.setVisible(false);
 		previewWrapper.add(editBanner, BorderLayout.SOUTH);
 
-		// â”€â”€ Controls (scrollable middle) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+		// ── Controls (scrollable middle) ──────────────────────────────────
 		ControlsPanel controls = new ControlsPanel();
 		controls.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-		// Object â€” name search + arrow/typed model id entry; arrows step through every id
+		// Object - name search + arrow/typed model id entry; arrows step through every id
 		// numerically (unnamed ids display as the bare number)
 		objectIdSpinner = new JSpinner(new AbstractSpinnerModel()
 		{
@@ -243,7 +243,7 @@ class MapDecoratorPanel extends PluginPanel
 		installSearchPopup(idField, objectIdSpinner, ObjectModelNames::search);
 		JPanel idRow = createFormRow("Object", objectIdSpinner);
 
-		// Animation â€” steps through sequence ids known to attach to a model, displays gameval names
+		// Animation - steps through sequence ids known to attach to a model, displays gameval names
 		animationSpinner = new JSpinner(new CuratedIdSpinnerModel(AnimationNames.attachableIds(), -1, -1));
 		animationSpinner.setPreferredSize(new Dimension(150, 24));
 		JFormattedTextField animField = ((JSpinner.DefaultEditor) animationSpinner.getEditor()).getTextField();
@@ -252,7 +252,7 @@ class MapDecoratorPanel extends PluginPanel
 		installSearchPopup(animField, animationSpinner, AnimationNames::searchWithModel);
 		JPanel animRow = createFormRow("Animation", animationSpinner);
 
-		// NPC â€” places a living npc (merged model parts + recolors + idle animation) instead of
+		// NPC - places a living npc (merged model parts + recolors + idle animation) instead of
 		// a single object model; mutually exclusive with the Object box
 		npcSpinner = new JSpinner(new CuratedIdSpinnerModel(NpcNames.knownIds(), -1, -1));
 		npcSpinner.setPreferredSize(new Dimension(150, 24));
@@ -276,7 +276,7 @@ class MapDecoratorPanel extends PluginPanel
 		npcInput.add(npcSpinner, BorderLayout.CENTER);
 		JPanel npcRow = createFormRow("NPC", npcInput);
 
-		// Offset â€” sub-tile position nudge, so objects can sit between tiles or against an edge
+		// Offset - sub-tile position nudge, so objects can sit between tiles or against an edge
 		offsetXSpinner = new JSpinner(new SpinnerNumberModel(0, -64, 64, 1));
 		offsetXSpinner.setPreferredSize(new Dimension(70, 24));
 		offsetXSpinner.addChangeListener(e ->
@@ -295,7 +295,7 @@ class MapDecoratorPanel extends PluginPanel
 		});
 		JPanel offsetYRow = createFormRow("Offset Y", createArrowExtremeButtons(offsetYSpinner), offsetYSpinner);
 
-		// Height â€” vertical nudge, applied to the ghost/placed object's Z above ground
+		// Height - vertical nudge, applied to the ghost/placed object's Z above ground
 		heightSpinner = new JSpinner(new SpinnerNumberModel(0, -256, 256, 1));
 		heightSpinner.setPreferredSize(new Dimension(70, 24));
 		heightSpinner.addChangeListener(e ->
@@ -305,7 +305,7 @@ class MapDecoratorPanel extends PluginPanel
 		});
 		JPanel heightRow = createFormRow("Height", createArrowExtremeButtons(heightSpinner), heightSpinner);
 
-		// Rotation â€” 0-360Â°; the NESW buttons below select themselves when it lands on a multiple of 90
+		// Rotation - 0-360°; the NESW buttons below select themselves when it lands on a multiple of 90
 		rotationSpinner = new JSpinner(new WrappingDegreeSpinnerModel(180));
 		rotationSpinner.setPreferredSize(new Dimension(70, 24));
 		rotationSpinner.addChangeListener(e ->
@@ -318,7 +318,7 @@ class MapDecoratorPanel extends PluginPanel
 		});
 		JPanel rotationRow = createFormRow("Rotation", createRotationStepButtons(rotationSpinner), rotationSpinner);
 
-		// Scale â€” size adjustment in percent; 0 = the model's normal size
+		// Scale - size adjustment in percent; 0 = the model's normal size
 		scaleSpinner = new JSpinner(new SpinnerNumberModel(0, -100, 100, 1));
 		scaleSpinner.setPreferredSize(new Dimension(70, 24));
 		scaleSpinner.addChangeListener(e ->
@@ -343,7 +343,7 @@ class MapDecoratorPanel extends PluginPanel
 		setSpinnerTooltip(rotationSpinner, "Facing in degrees. Arrow keys for fine control");
 		setSpinnerTooltip(scaleSpinner, "Size adjustment in percent, 0 is normal size");
 
-		// Facing buttons â€” clicking one jumps the rotation spinner to that exact heading
+		// Facing buttons - clicking one jumps the rotation spinner to that exact heading
 		JPanel facingButtons = new JPanel(new GridLayout(1, 4, 4, 0));
 		facingButtons.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		facingButtons.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -372,7 +372,7 @@ class MapDecoratorPanel extends PluginPanel
 			facingButtons.add(btn);
 		}
 
-		// Mirror (prototype) â€” flips the model across its vertical axis
+		// Mirror (prototype) - flips the model across its vertical axis
 		mirrorChk = new JCheckBox("Mirror");
 		mirrorChk.setToolTipText("Flip the object left-to-right (prototype)");
 		mirrorChk.setForeground(Color.WHITE);
@@ -385,7 +385,7 @@ class MapDecoratorPanel extends PluginPanel
 			applyEditIfActive();
 		});
 
-		// Tint (prototype) â€” a colour swatch; the picker's opacity is the tint strength, 0 = off
+		// Tint (prototype) - a colour swatch; the picker's opacity is the tint strength, 0 = off
 		JLabel tintLabel = new JLabel("Tint");
 		tintLabel.setForeground(Color.WHITE);
 		tintLabel.setFont(FontManager.getRunescapeSmallFont());
@@ -465,7 +465,7 @@ class MapDecoratorPanel extends PluginPanel
 			}
 		});
 
-		// Snap â€” off by default, so placement lands exactly under the cursor instead of
+		// Snap - off by default, so placement lands exactly under the cursor instead of
 		// dead-center on the tile; toggling this on restores the old tile-center behaviour.
 		snapChk = new JCheckBox("Snap");
 		snapChk.setToolTipText("Place dead-center on the tile instead of exactly under your cursor");
@@ -480,7 +480,7 @@ class MapDecoratorPanel extends PluginPanel
 			}
 		});
 
-		// Random â€” randomizes rotation and mirror on every placement (offset/scale left alone
+		// Random - randomizes rotation and mirror on every placement (offset/scale left alone
 		// to avoid clipping/oversized-model issues with scatter placement).
 		randomChk = new JCheckBox("Random");
 		randomChk.setToolTipText("Randomize rotation and mirror on every placement, for natural-looking scatter");
@@ -497,7 +497,7 @@ class MapDecoratorPanel extends PluginPanel
 			setGeometryControlsEnabled(!enabled);
 		});
 
-		// Left column: Tint, Cursor ghost, Be Object, Snap â€” right column: Mirror, Random, Hide UI, Hide Menu
+		// Left column: Tint, Cursor ghost, Be Object, Snap - right column: Mirror, Random, Hide UI, Hide Menu
 		// Random sits under Mirror because it overrides it; the two Hide toggles pair at the bottom.
 		JPanel togglesGrid = new JPanel(new GridLayout(4, 2, 6, 2));
 		togglesGrid.setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -614,7 +614,7 @@ class MapDecoratorPanel extends PluginPanel
 		scrollPane.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		scrollPane.getViewport().setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-		// â”€â”€ Share (pinned bottom, above Clear Area) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+		// ── Share (pinned bottom, above Clear Area) ───────────────────────
 		JButton exportBtn = new JButton("Export Nearby");
 		exportBtn.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		exportBtn.setForeground(Color.WHITE);
@@ -651,7 +651,7 @@ class MapDecoratorPanel extends PluginPanel
 		sharePanel.add(exportBtn);
 		sharePanel.add(importBtn);
 
-		// â”€â”€ Clear Area (pinned bottom) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+		// ── Clear Area (pinned bottom) ────────────────────────────────────
 		JButton clearBtn = new JButton("Clear Area");
 		clearBtn.setToolTipText("Remove every placed object in the loaded area (undoable)");
 		clearBtn.setBackground(new Color(160, 30, 30));
@@ -741,7 +741,7 @@ class MapDecoratorPanel extends PluginPanel
 		else
 		{
 			swatch.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-			swatch.setText("â€“");
+			swatch.setText("-");
 		}
 	}
 
@@ -776,7 +776,7 @@ class MapDecoratorPanel extends PluginPanel
 
 	/**
 	 * Strips the colour chooser down to its HSV tab. Swatches/RGB/CMYK are noise for picking a
-	 * tint â€” hue and saturation are what actually read as "paint it this colour", and opacity
+	 * tint - hue and saturation are what actually read as "paint it this colour", and opacity
 	 * (the tint strength) lives on our own slider in the preview panel instead.
 	 * <p>
 	 * Tab names are localised, so if no HSV panel is found this leaves the chooser untouched
@@ -893,7 +893,7 @@ class MapDecoratorPanel extends PluginPanel
 	/**
 	 * Same as {@link #createFormRow(String, Component)}, but with a min/max quick-jump control
 	 * placed immediately to the left of the spinner instead of leaving that space empty.
-	 * A/B comparison scaffold â€” each of the five rows using this overload currently wires a
+	 * A/B comparison scaffold - each of the five rows using this overload currently wires a
 	 * different button style so they can be compared live before settling on one.
 	 */
 	private JPanel createFormRow(String labelText, JComponent leading, JSpinner spinner)
@@ -918,9 +918,9 @@ class MapDecoratorPanel extends PluginPanel
 
 	/** A small bordered button with the given text, styled to match the panel's other small buttons. */
 	/**
-	 * A small translucent square with a bold double-chevron, for "jump to min/max" (not a Â±1 nudge).
+	 * A small translucent square with a bold double-chevron, for "jump to min/max" (not a ±1 nudge).
 	 * left=true points left/toward the minimum ("&lt;&lt;"), left=false points right/toward the
-	 * maximum ("&gt;&gt;") â€” each chevron's vertex sits closer to that edge of the button, with its
+	 * maximum ("&gt;&gt;") - each chevron's vertex sits closer to that edge of the button, with its
 	 * two open ends trailing away from it.
 	 */
 	private JButton doubleArrowButton(boolean left, Runnable action)
@@ -1035,7 +1035,7 @@ class MapDecoratorPanel extends PluginPanel
 		return Math.round((orientation - 1024 + 2048) % 2048 / 2048f * 360f);
 	}
 
-	/** Selects the NESW button for whichever 90Â° quadrant deg falls in (0-89=N, 90-179=E, 180-269=S, 270-359=W). */
+	/** Selects the NESW button for whichever 90° quadrant deg falls in (0-89=N, 90-179=E, 180-269=S, 270-359=W). */
 	private void updateFacingSelection(int deg)
 	{
 		int zone = (deg % 360) / 90;
@@ -1082,7 +1082,7 @@ class MapDecoratorPanel extends PluginPanel
 
 	private void addFavouriteRow(int slot)
 	{
-		JButton nameBtn = new JButton("â€” empty â€”");
+		JButton nameBtn = new JButton("- empty -");
 		nameBtn.setToolTipText("Left-click to load this favourite, right-click to remove the slot");
 		nameBtn.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		nameBtn.setForeground(SLOT_EMPTY_FG);
@@ -1113,7 +1113,7 @@ class MapDecoratorPanel extends PluginPanel
 		});
 		slotButtons.add(nameBtn);
 
-		JButton starBtn = new JButton("â˜…");
+		JButton starBtn = new JButton("★");
 		starBtn.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		starBtn.setForeground(STAR_COLOR);
 		starBtn.setFont(FontManager.getRunescapeSmallFont());
@@ -1312,7 +1312,7 @@ class MapDecoratorPanel extends PluginPanel
 		}
 	}
 
-	// â”€â”€ Favourite helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Favourite helpers ──────────────────────────────────────────────────
 
 	private void refreshFavouriteButtons()
 	{
@@ -1332,7 +1332,7 @@ class MapDecoratorPanel extends PluginPanel
 	{
 		if (fav == null)
 		{
-			btn.setText("â€” empty â€”");
+			btn.setText("- empty -");
 			btn.setForeground(SLOT_EMPTY_FG);
 		}
 		else
@@ -1479,7 +1479,7 @@ class MapDecoratorPanel extends PluginPanel
 		favCountLabel.setText(count + "/" + MAX_FAV_SLOTS);
 	}
 
-	// â”€â”€ Edit mode (a placed object bound to the controls) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Edit mode (a placed object bound to the controls) ────────────────
 
 	/** Call after the edited object's properties are loaded into the controls (loads don't count as edits). */
 	void enterEditMode()
@@ -1520,7 +1520,7 @@ class MapDecoratorPanel extends PluginPanel
 		preview.setUndoRedoState(canUndo, canRedo);
 	}
 
-	// â”€â”€ Object / Animation change â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Object / Animation change ────────────────────────────────────────
 
 	private void onNpcChanged()
 	{
@@ -1553,7 +1553,7 @@ class MapDecoratorPanel extends PluginPanel
 		selectedAnimationId = (Integer) animationSpinner.getValue();
 		if (selectedAnimationId > 0 && selectedNpcId > 0)
 		{
-			// Animations belong to the Object box's world â€” picking one deselects the npc
+			// Animations belong to the Object box's world - picking one deselects the npc
 			suppressAnimationClear = true;
 			npcSpinner.setValue(-1);
 			suppressAnimationClear = false;
@@ -1598,7 +1598,7 @@ class MapDecoratorPanel extends PluginPanel
 
 	/**
 	 * Wires a name-search dropdown onto a spinner's text field: type part of a name to see every match.
-	 * Highlighting an entry â€” by mouse hover or arrow keys â€” immediately sets {@code spinner}'s value,
+	 * Highlighting an entry - by mouse hover or arrow keys - immediately sets {@code spinner}'s value,
 	 * so the 3D preview, the cursor ghost, and what a Place puts down are always the same thing.
 	 */
 	private void installSearchPopup(JFormattedTextField field, JSpinner spinner,
@@ -1665,7 +1665,7 @@ class MapDecoratorPanel extends PluginPanel
 
 		// A Document mutation fires identically whether it came from a real keystroke or from the
 		// spinner rewriting the field's text after an arrow-click/setValue (e.g. cycling to a value
-		// that happens to have a name). Only the former should ever open a search popup â€” otherwise
+		// that happens to have a name). Only the former should ever open a search popup - otherwise
 		// arrow-cycling through named values spuriously reopens/steals the box. keyPressed on a
 		// character, backspace, or delete key marks the *next* document change as real typing;
 		// anything else (programmatic updates) leaves the flag unset and gets ignored below.
@@ -1696,7 +1696,7 @@ class MapDecoratorPanel extends PluginPanel
 					}
 					if (code == KeyEvent.VK_ENTER)
 					{
-						// Nothing highlighted yet (typed but never arrowed/hovered) â€” take the top result
+						// Nothing highlighted yet (typed but never arrowed/hovered) - take the top result
 						int idx = Math.max(0, list.getSelectedIndex());
 						if (model.getSize() > 0)
 						{
@@ -1806,9 +1806,9 @@ class MapDecoratorPanel extends PluginPanel
 		int tint = selectedTintArgb;
 		long generation = previewRequestGeneration.incrementAndGet();
 		// Retries while the model is still loading (a first-visit id usually isn't in the game's
-		// cache yet), and drops the request entirely once a newer selection supersedes it â€” so
+		// cache yet), and drops the request entirely once a newer selection supersedes it - so
 		// scrolling through ids can neither blank out on a cold load nor paint a stale model.
-		// Loaded once and reused for the preview, cursor ghost, and Be Object stand-in â€” each is
+		// Loaded once and reused for the preview, cursor ghost, and Be Object stand-in - each is
 		// a merge+scale+tint pass, not worth repeating three times per change.
 		plugin.withDecorationModel(id, npcId, scale, mirror, tint,
 			() -> previewRequestGeneration.get() != generation,
@@ -1820,7 +1820,7 @@ class MapDecoratorPanel extends PluginPanel
 			});
 	}
 
-	// â”€â”€ Saves (named export/import codes) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Saves (named export/import codes) ───────────────────────────────
 
 	/** After an export/import completes, offers to keep this code as a named save for later. */
 	void promptSaveLayout(String code, String defaultName)
@@ -1844,7 +1844,7 @@ class MapDecoratorPanel extends PluginPanel
 		}
 		if (!plugin.addSavedLayout(name, code))
 		{
-			JOptionPane.showMessageDialog(this, "You've hit the save limit â€” remove one first.");
+			JOptionPane.showMessageDialog(this, "You've hit the save limit - remove one first.");
 			return;
 		}
 		refreshSavesRows();
@@ -1858,7 +1858,7 @@ class MapDecoratorPanel extends PluginPanel
 			List<SavedLayout> layouts = plugin.getSavedLayouts();
 			if (layouts.isEmpty())
 			{
-				JLabel empty = new JLabel("â€” no saved layouts yet â€”");
+				JLabel empty = new JLabel("- no saved layouts yet -");
 				empty.setForeground(SLOT_EMPTY_FG);
 				empty.setFont(FontManager.getRunescapeSmallFont());
 				empty.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -1977,7 +1977,7 @@ class MapDecoratorPanel extends PluginPanel
 		refreshSavesRows();
 	}
 
-	// â”€â”€ Scrollable controls container â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Scrollable controls container ──────────────────────────────────────
 
 	private static final class ControlsPanel extends JPanel implements Scrollable
 	{
@@ -2017,7 +2017,7 @@ class MapDecoratorPanel extends PluginPanel
 		}
 	}
 
-	// â”€â”€ Collapsible section header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Collapsible section header ──────────────────────────────────────
 
 	/** A clickable header with a chevron that shows/hides a body component below it. */
 	private static final class CollapsibleSection

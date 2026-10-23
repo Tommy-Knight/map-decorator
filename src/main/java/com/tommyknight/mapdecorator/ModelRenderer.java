@@ -59,7 +59,7 @@ class ModelRenderer
 	 * Extract data from the model. Must be called on the client thread.
 	 *
 	 * @param textureRgb resolves a game texture id to its average RGB, so textured faces
-	 *                   (whose face color is a meaningless placeholder â€” e.g. tree canopies)
+	 *                   (whose face color is a meaningless placeholder - e.g. tree canopies)
 	 *                   render in roughly the right color instead of grey; may be null,
 	 *                   and may return null for unloaded textures (falls back to the HSL color)
 	 */
@@ -207,7 +207,7 @@ class ModelRenderer
 				continue; // effectively invisible
 			}
 
-			// Screen-space signed area â€” skip backfaces
+			// Screen-space signed area - skip backfaces
 			float area = (sx[b] - sx[a]) * (sy[c] - sy[a]) - (sy[b] - sy[a]) * (sx[c] - sx[a]);
 			if (area >= 0)
 			{
@@ -254,7 +254,7 @@ class ModelRenderer
 		return img;
 	}
 
-	// â”€â”€ Color conversion â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Color conversion ─────────────────────────────────────────────────
 
 	/**
 	 * Convert Jagex packed HSL (6-bit hue, 3-bit saturation, 7-bit luminance) to sRGB.

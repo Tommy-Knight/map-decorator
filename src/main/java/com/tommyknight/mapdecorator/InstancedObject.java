@@ -15,7 +15,7 @@ import net.runelite.api.coords.WorldPoint;
  * regionId/regionX/regionY rather than a snapshot of the currently loaded scene.
  *
  * Two rooms with identical furniture resolve to the exact same template chunk, and so the
- * exact same regionId/regionX/regionY/plane — the template chunk identifies a room's
+ * exact same regionId/regionX/regionY/plane - the template chunk identifies a room's
  * geometry, not its physical slot. occurrence disambiguates them: it's this room's index
  * among however many rooms currently share that template, in a fixed deterministic order
  * (ascending WorldPoint x, then y) recomputed fresh each time. Stable as long as the set of
