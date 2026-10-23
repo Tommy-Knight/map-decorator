@@ -111,6 +111,10 @@ public class MapDecoratorPlugin extends Plugin
 
 	/** Active RuneLiteObjects in instanced regions (POH), keyed by scene tile. */
 	private final Map<InstancedObject, RuneLiteObject> activeInstancedObjects = new HashMap<>();
+	/** True once this visit's saved house is in activeInstancedObjects; saves are refused until then. */
+	private boolean instancedLoaded;
+	/** The saved house could not be read; stop retrying, and keep refusing saves so it is not overwritten. */
+	private boolean instancedLoadFailed;
 
 	private RuneLiteObject ghostObject;
 	private boolean ghostEnabled;
@@ -192,6 +196,12 @@ public class MapDecoratorPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
+		// The LOGGED_IN load can miss the house (the player is not inside it yet at that moment),
+		// so keep trying until it lands
+		if (!instancedLoaded && isInPoh())
+		{
+			loadInstancedObjects();
+		}
 		tickInstancedVisibility();
 	}
 
@@ -826,6 +836,8 @@ public class MapDecoratorPlugin extends Plugin
 			despawn(rlo);
 		}
 		activeInstancedObjects.clear();
+		instancedLoaded = false;
+		instancedLoadFailed = false;
 	}
 
 	@Subscribe
@@ -1496,6 +1508,7 @@ public class MapDecoratorPlugin extends Plugin
 			clientThread.invoke(() ->
 			{
 				despawn(activeInstancedObjects.remove(instCur));
+				activeInstancedObjects.put(instOriginal, null);
 				spawnInstancedObject(instOriginal);
 				saveInstancedObjects();
 			});
@@ -1545,6 +1558,9 @@ public class MapDecoratorPlugin extends Plugin
 				}
 				editInstancedTarget = updated;
 				despawn(activeInstancedObjects.remove(old));
+				// Reserve the entry before spawning: the model can load a tick or more later, and
+				// saving without it would drop the edited decoration from the house for good
+				activeInstancedObjects.put(updated, null);
 				spawnInstancedObject(updated);
 				saveInstancedObjects();
 			}
@@ -1610,6 +1626,8 @@ public class MapDecoratorPlugin extends Plugin
 				despawn(rlo);
 			}
 			activeInstancedObjects.clear();
+			instancedLoaded = false;
+			instancedLoadFailed = false;
 		});
 	}
 
@@ -2281,7 +2299,7 @@ public class MapDecoratorPlugin extends Plugin
 			return;
 		}
 		long accountHash = client.getAccountHash();
-		if (accountHash <= 0)
+		if (accountHash <= 0 || instancedLoadFailed)
 		{
 			return;
 		}
@@ -2296,6 +2314,8 @@ public class MapDecoratorPlugin extends Plugin
 		}
 		if (json == null || json.isEmpty())
 		{
+			// Nothing saved yet, so an empty house is the true state and saving is safe
+			instancedLoaded = true;
 			return;
 		}
 		try
@@ -2303,6 +2323,7 @@ public class MapDecoratorPlugin extends Plugin
 			JsonArray array = gson.fromJson(json, JsonArray.class);
 			if (array == null || array.size() == 0)
 			{
+				instancedLoaded = true;
 				return;
 			}
 
@@ -2339,6 +2360,7 @@ public class MapDecoratorPlugin extends Plugin
 				activeInstancedObjects.put(obj, null);
 				spawnInstancedObject(obj);
 			}
+			instancedLoaded = true;
 			if (legacyFormat || migratedFromNameKey)
 			{
 				// Persist immediately under the current key/format so each migration only ever runs once
@@ -2347,6 +2369,8 @@ public class MapDecoratorPlugin extends Plugin
 		}
 		catch (Exception e)
 		{
+			// Leave instancedLoaded false so no save can overwrite the unreadable data
+			instancedLoadFailed = true;
 			log.warn("Failed to load instanced objects", e);
 		}
 	}
@@ -2447,6 +2471,13 @@ public class MapDecoratorPlugin extends Plugin
 		long accountHash = client.getAccountHash();
 		if (accountHash <= 0)
 		{
+			return;
+		}
+		// The save writes the whole house from memory. Until the saved house has loaded, memory
+		// holds none of it, and saving would overwrite every decoration with nothing.
+		if (!instancedLoaded)
+		{
+			log.warn("Not saving house decorations: the saved layout has not loaded yet");
 			return;
 		}
 		List<InstancedObject> list = new ArrayList<>(activeInstancedObjects.keySet());
