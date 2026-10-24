@@ -31,4 +31,6 @@ class Favourite
 	boolean mirror;
 	/** Tint colour with alpha as strength; alpha 0 = no tint. Absent in pre-1.2 saves (defaults to 0). */
 	int tintArgb;
+	/** Spotanim id of the 117 HD light this decoration is ({@link LightPreset}); 0 = not a light. Absent in pre-1.3 saves (defaults to 0). */
+	int lightPreset;
 }

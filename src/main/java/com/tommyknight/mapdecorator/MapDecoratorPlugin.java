@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -90,6 +91,7 @@ public class MapDecoratorPlugin extends Plugin
 
 	// Gson list types, resolved once - each `new TypeToken<...>(){}` is an anonymous class
 	private static final Type PLACED_OBJECT_LIST = new TypeToken<List<PlacedObject>>() {}.getType();
+	private static final String BACKUP_SUFFIX = "_backup";
 	private static final Type INSTANCED_OBJECT_LIST = new TypeToken<List<InstancedObject>>() {}.getType();
 	private static final Type SAVED_LAYOUT_LIST = new TypeToken<List<SavedLayout>>() {}.getType();
 
@@ -102,6 +104,10 @@ public class MapDecoratorPlugin extends Plugin
 	@Inject private ClientToolbar clientToolbar;
 	@Inject private Hooks hooks;
 	@Inject private Gson gson;
+	@Inject private LightAnchors lightAnchors;
+
+	/** Decorations that can share one tile, lights included. Stack slots run 0 to MAX_PER_TILE - 1. */
+	static final int MAX_PER_TILE = 6;
 
 	private MapDecoratorPanel panel;
 	private NavigationButton navButton;
@@ -111,8 +117,12 @@ public class MapDecoratorPlugin extends Plugin
 
 	/** Active RuneLiteObjects in instanced regions (POH), keyed by scene tile. */
 	private final Map<InstancedObject, RuneLiteObject> activeInstancedObjects = new HashMap<>();
-	/** True once this visit's saved house is in activeInstancedObjects; saves are refused until then. */
-	private boolean instancedLoaded;
+	/** True once this visit's saved house is in activeInstancedObjects; saves are refused until then. Read from the EDT. */
+	private volatile boolean instancedLoaded;
+	/** The first save of each house visit copies the stored layout to the backup key first. */
+	private boolean instancedBackedUp;
+	/** Regions whose saved data could not be read; never saved over, so the data survives for repair. */
+	private final Set<Integer> unreadableRegions = ConcurrentHashMap.newKeySet();
 	/** The saved house could not be read; stop retrying, and keep refusing saves so it is not overwritten. */
 	private boolean instancedLoadFailed;
 
@@ -145,6 +155,7 @@ public class MapDecoratorPlugin extends Plugin
 
 		clientToolbar.addNavigation(navButton);
 		hooks.registerRenderableDrawListener(drawListener);
+		lightAnchors.startUp();
 		clientThread.invoke(this::loadAll);
 	}
 
@@ -180,6 +191,7 @@ public class MapDecoratorPlugin extends Plugin
 			}
 			despawnAll();
 			loadedObjects.clear();
+			lightAnchors.shutDown();
 		});
 	}
 
@@ -201,8 +213,13 @@ public class MapDecoratorPlugin extends Plugin
 		if (!instancedLoaded && isInPoh())
 		{
 			loadInstancedObjects();
+			if (instancedLoaded)
+			{
+				log.info("House decorations loaded on a later tick: the load at login missed the house");
+			}
 		}
 		tickInstancedVisibility();
+		lightAnchors.tick();
 	}
 
 	// ── Roaming npcs ──────────────────────────────────────────────────────
@@ -266,6 +283,7 @@ public class MapDecoratorPlugin extends Plugin
 		}
 		rlo.setActive(false);
 		roamers.removeIf(r -> r.rlo == rlo);
+		lightAnchors.remove(rlo);
 	}
 
 	private void tickRoamers()
@@ -327,6 +345,7 @@ public class MapDecoratorPlugin extends Plugin
 		if (isEditing())
 		{
 			ghostObject.setActive(false);
+			lightAnchors.remove(ghostObject);
 			return;
 		}
 		WorldView wv = client.getTopLevelWorldView();
@@ -338,6 +357,7 @@ public class MapDecoratorPlugin extends Plugin
 		if (tile == null)
 		{
 			ghostObject.setActive(false);
+			lightAnchors.remove(ghostObject);
 			return;
 		}
 		// Once the right-click menu is open, the mouse is over the menu itself, not the game
@@ -368,7 +388,15 @@ public class MapDecoratorPlugin extends Plugin
 		ghostObject.setLocation(lp, tile.getWorldLocation().getPlane());
 		// Scene Z is negative-upward; subtract so a positive height offset raises the object
 		ghostObject.setZ(ghostObject.getZ() - panel.getSelectedHeightOffset());
-		ghostObject.setActive(true);
+		if (ghostObject.getModel() == null)
+		{
+			// A light ghost: the anchors re-anchor it only once it has moved a tile
+			lightAnchors.put(ghostObject, LightAnchors.Spec.of(panel.getSelectedLightPreset(), panel.getSelectedScale()));
+		}
+		else
+		{
+			ghostObject.setActive(true);
+		}
 	}
 
 	private void tickBeObject()
@@ -480,6 +508,7 @@ public class MapDecoratorPlugin extends Plugin
 				if (ghostObject != null)
 				{
 					ghostObject.setActive(false);
+					lightAnchors.remove(ghostObject);
 					ghostObject = null;
 				}
 			});
@@ -563,10 +592,13 @@ public class MapDecoratorPlugin extends Plugin
 		if (ghostObject != null)
 		{
 			ghostObject.setActive(false);
+			lightAnchors.remove(ghostObject);
 		}
 		if (md == null)
 		{
-			ghostObject = null;
+			// A light selection gets a model-less carrier for its glow to follow
+			ghostObject = isLight(panel.getSelectedObjectId(), npcId) && panel.getSelectedLightPreset() != 0
+				? client.createRuneLiteObject() : null;
 			return;
 		}
 		RuneLiteObject rlo = client.createRuneLiteObject();
@@ -646,6 +678,11 @@ public class MapDecoratorPlugin extends Plugin
 	void withDecorationModel(int objectId, int npcId, int scalePercent, boolean mirror, int tintArgb,
 		BooleanSupplier cancelled, Consumer<ModelData> action)
 	{
+		if (isLight(objectId, npcId))
+		{
+			clientThread.invoke(() -> action.accept(null));
+			return;
+		}
 		// Only ever read/written on the client thread, so a plain holder is enough
 		int[] attempts = {0};
 		clientThread.invoke(() ->
@@ -838,6 +875,7 @@ public class MapDecoratorPlugin extends Plugin
 		activeInstancedObjects.clear();
 		instancedLoaded = false;
 		instancedLoadFailed = false;
+		instancedBackedUp = false;
 	}
 
 	@Subscribe
@@ -948,7 +986,7 @@ public class MapDecoratorPlugin extends Plugin
 			int menuIdx = -1;
 			for (InstancedObject obj : atTile)
 			{
-				String target = stackLabel(obj.getStackIndex());
+				String target = isLight(obj.getObjectId(), obj.getNpcId()) ? "Light" : stackLabel(obj.getStackIndex());
 				client.getMenu().createMenuEntry(menuIdx--)
 					.setOption("Remove")
 					.setTarget(target)
@@ -962,13 +1000,13 @@ public class MapDecoratorPlugin extends Plugin
 			}
 			// While editing, the panel controls belong to the edited object - placing a copy
 			// mid-edit is almost never what was meant, so the option is hidden until Done.
-			if (atTile.size() < 3 && !isEditing())
+			if (atTile.size() < MAX_PER_TILE && !isEditing())
 			{
 				client.getMenu().createMenuEntry(menuIdx)
 					.setOption("Place")
-					.setTarget("Object")
+					.setTarget(lightSelected() ? "Light" : "Object")
 					.setType(MenuAction.RUNELITE)
-					.onClick(e -> placeInstancedObject(tile, clickPos));
+					.onClick(e -> placeInstancedObject(tile, clickPos, lightSelected()));
 			}
 		}
 		else
@@ -979,7 +1017,7 @@ public class MapDecoratorPlugin extends Plugin
 			int menuIdx = -1;
 			for (PlacedObject obj : atTile)
 			{
-				String target = stackLabel(obj.getStackIndex());
+				String target = isLight(obj.getObjectId(), obj.getNpcId()) ? "Light" : stackLabel(obj.getStackIndex());
 				client.getMenu().createMenuEntry(menuIdx--)
 					.setOption("Remove")
 					.setTarget(target)
@@ -991,48 +1029,50 @@ public class MapDecoratorPlugin extends Plugin
 					.setType(MenuAction.RUNELITE)
 					.onClick(e -> startEdit(wv, obj));
 			}
-			if (atTile.size() < 3 && !isEditing())
+			if (atTile.size() < MAX_PER_TILE && !isEditing())
 			{
 				client.getMenu().createMenuEntry(menuIdx)
 					.setOption("Place")
-					.setTarget("Object")
+					.setTarget(lightSelected() ? "Light" : "Object")
 					.setType(MenuAction.RUNELITE)
-					.onClick(e -> placeObject(wv, wp, tile.getLocalLocation(), clickPos));
+					.onClick(e -> placeObject(wv, wp, tile.getLocalLocation(), clickPos, lightSelected()));
 			}
 		}
 	}
 
-	private void placeObject(WorldView wv, WorldPoint wp, LocalPoint directLp, Point clickPos)
+	private void placeObject(WorldView wv, WorldPoint wp, LocalPoint directLp, Point clickPos, boolean lightOnly)
 	{
 		// Snapshot the panel up front: the model check below can defer this by a tick or two
 		// while a cold model finishes loading, and the placed object should reflect what was
 		// selected at click time rather than whatever the panel drifted to since.
-		int objectId = panel.getSelectedObjectId();
-		int npcId = panel.getSelectedNpcId();
+		// A light is its own decoration with no model; an object never carries a light
+		int objectId = lightOnly ? -1 : panel.getSelectedObjectId();
+		int npcId = lightOnly ? -1 : panel.getSelectedNpcId();
 		int scale = panel.getSelectedScale();
-		int animationId = panel.getSelectedAnimationId();
+		int animationId = lightOnly ? -1 : panel.getSelectedAnimationId();
 		int heightOffset = panel.getSelectedHeightOffset();
-		boolean roam = panel.getSelectedRoam();
-		int tintArgb = panel.getSelectedTintArgb();
+		boolean roam = !lightOnly && panel.getSelectedRoam();
+		int tintArgb = lightOnly ? 0 : panel.getSelectedTintArgb();
+		int lightPreset = lightOnly ? panel.getSelectedLightPreset() : 0;
 
 		int rawOffsetX = panel.getSelectedOffsetX();
 		int rawOffsetY = panel.getSelectedOffsetY();
 		int panelOrientation = panel.getSelectedOrientation();
-		boolean panelMirror = panel.getSelectedMirror();
+		boolean panelMirror = !lightOnly && panel.getSelectedMirror();
 
 		// The model has to resolve before anything is persisted, or a bogus typed id would leave
-		// an invisible decoration still occupying one of the tile's three slots. A cold-cache
+		// an invisible decoration still occupying one of the tile's slots. A cold-cache
 		// miss isn't a bogus id though, so this retries rather than giving up on the first null
 		// (see withDecorationModel); on a warm cache it runs synchronously, as it always did.
 		withDecorationModel(objectId, npcId, scale, panelMirror, tintArgb, null, md ->
 		{
-			if (md == null)
+			if (md == null && !lightOnly)
 			{
 				log.debug("No model for object id {} / npc id {}, not placing", objectId, npcId);
 				return;
 			}
 			List<PlacedObject> atTile = findAllAtTile(wv, wp);
-			if (atTile.size() >= 3)
+			if (atTile.size() >= MAX_PER_TILE)
 			{
 				return;
 			}
@@ -1084,7 +1124,8 @@ public class MapDecoratorPlugin extends Plugin
 				scale,
 				roam,
 				mirror,
-				tintArgb
+				tintArgb,
+				lightPreset
 			);
 
 			loadedObjects.put(wv, obj);
@@ -1092,6 +1133,30 @@ public class MapDecoratorPlugin extends Plugin
 			saveRegion(wp.getRegionID(), wv);
 			recordOverworldAction(List.of(), List.of(obj));
 		});
+	}
+
+	/** The panel's current selection is a light rather than an object or npc. */
+	private boolean lightSelected()
+	{
+		return panel.getSelectedLightPreset() != 0 && isLight(panel.getSelectedObjectId(), panel.getSelectedNpcId());
+	}
+
+	/** A decoration with neither an object nor an npc is a standalone light. */
+	static boolean isLight(int objectId, int npcId)
+	{
+		return objectId <= 0 && npcId <= 0;
+	}
+
+	/**
+	 * Stands in for a light's decoration: positioned like any other, but with no model and never
+	 * activated, so nothing draws. LightAnchors reads its location to hang the glow on.
+	 */
+	private RuneLiteObject createLightCarrier(LocalPoint lp, int plane, int heightOffset)
+	{
+		RuneLiteObject rlo = client.createRuneLiteObject();
+		rlo.setLocation(lp, plane);
+		rlo.setZ(rlo.getZ() - heightOffset);
+		return rlo;
 	}
 
 	/**
@@ -1388,7 +1453,7 @@ public class MapDecoratorPlugin extends Plugin
 		editOriginal = obj;
 		loadEditIntoPanel(obj.getObjectId(), obj.getOrientation(), obj.getAnimationId(),
 			obj.getHeightOffset(), obj.getOffsetX(), obj.getOffsetY(), obj.getNpcId(), obj.getScale(), obj.isRoam(),
-			obj.isMirror(), obj.getTintArgb());
+			obj.isMirror(), obj.getTintArgb(), obj.getLightPreset());
 	}
 
 	private void startEditInstanced(WorldView wv, InstancedObject obj)
@@ -1402,11 +1467,11 @@ public class MapDecoratorPlugin extends Plugin
 		editInstancedOriginal = obj;
 		loadEditIntoPanel(obj.getObjectId(), obj.getOrientation(), obj.getAnimationId(),
 			obj.getHeightOffset(), obj.getOffsetX(), obj.getOffsetY(), obj.getNpcId(), obj.getScale(), obj.isRoam(),
-			obj.isMirror(), obj.getTintArgb());
+			obj.isMirror(), obj.getTintArgb(), obj.getLightPreset());
 	}
 
 	private void loadEditIntoPanel(int objectId, int orientation, int animationId, int heightOffset, int offsetX, int offsetY,
-		int npcId, int scale, boolean roam, boolean mirror, int tintArgb)
+		int npcId, int scale, boolean roam, boolean mirror, int tintArgb, int lightPreset)
 	{
 		SwingUtilities.invokeLater(() ->
 		{
@@ -1414,15 +1479,20 @@ public class MapDecoratorPlugin extends Plugin
 			// using whatever mirror/tint is already in the panel's fields at that point.
 			panel.setMirror(mirror);
 			panel.setTintArgb(tintArgb);
+			panel.setLight(lightPreset);
 			// Load values before flipping the panel into edit mode so the loads themselves
 			// don't count as user edits. The boxes clear each other (object clears npc/animation,
 			// npc clears object/animation, animation clears npc), so the order matters:
 			// object first, then npc; animation only applies to non-npc decorations.
-			panel.setObjectId(objectId);
-			panel.setNpcId(npcId);
-			if (npcId <= 0)
+			// A light has no model, so the model boxes keep whatever they had
+			if (!isLight(objectId, npcId))
 			{
-				panel.setAnimationId(animationId);
+				panel.setObjectId(objectId);
+				panel.setNpcId(npcId);
+				if (npcId <= 0)
+				{
+					panel.setAnimationId(animationId);
+				}
 			}
 			panel.setOrientationControls(orientation);
 			panel.setHeightOffset(heightOffset);
@@ -1482,9 +1552,13 @@ public class MapDecoratorPlugin extends Plugin
 			{
 				panel.setMirror(original.isMirror());
 				panel.setTintArgb(original.getTintArgb());
-				panel.setObjectId(original.getObjectId());
-				panel.setNpcId(original.getNpcId());
-				panel.setAnimationId(original.getAnimationId());
+				panel.setLight(original.getLightPreset());
+				if (!isLight(original.getObjectId(), original.getNpcId()))
+				{
+					panel.setObjectId(original.getObjectId());
+					panel.setNpcId(original.getNpcId());
+					panel.setAnimationId(original.getAnimationId());
+				}
 				panel.setOrientationControls(original.getOrientation());
 				panel.setHeightOffset(original.getHeightOffset());
 				panel.setOffset(original.getOffsetX(), original.getOffsetY());
@@ -1529,13 +1603,24 @@ public class MapDecoratorPlugin extends Plugin
 		boolean roam = panel.getSelectedRoam();
 		boolean mirror = panel.getSelectedMirror();
 		int tintArgb = panel.getSelectedTintArgb();
+		int lightPreset = panel.getSelectedLightPreset();
+		// The panel decides what the edited decoration is, so it can switch between object,
+		// npc and light like any other selection change; with nothing selected, leave it be
+		boolean lightEdit = lightPreset != 0 && isLight(objectId, npcId);
+		if (!lightEdit && isLight(objectId, npcId))
+		{
+			return;
+		}
 		clientThread.invoke(() ->
 		{
 			if (editTarget != null && editWorldView != null)
 			{
 				PlacedObject old = editTarget;
-				PlacedObject updated = new PlacedObject(old.getRegionId(), old.getRegionX(), old.getRegionY(),
-					old.getPlane(), objectId, orientation, old.getStackIndex(), animationId, heightOffset, offsetX, offsetY, npcId, scale, roam, mirror, tintArgb);
+				PlacedObject updated = lightEdit
+					? new PlacedObject(old.getRegionId(), old.getRegionX(), old.getRegionY(),
+						old.getPlane(), -1, orientation, old.getStackIndex(), -1, heightOffset, offsetX, offsetY, -1, scale, false, false, 0, lightPreset)
+					: new PlacedObject(old.getRegionId(), old.getRegionX(), old.getRegionY(),
+						old.getPlane(), objectId, orientation, old.getStackIndex(), animationId, heightOffset, offsetX, offsetY, npcId, scale, roam, mirror, tintArgb, 0);
 				if (old.sameDecoration(updated))
 				{
 					return;
@@ -1550,8 +1635,11 @@ public class MapDecoratorPlugin extends Plugin
 			else if (editInstancedTarget != null)
 			{
 				InstancedObject old = editInstancedTarget;
-				InstancedObject updated = new InstancedObject(old.getRegionId(), old.getRegionX(), old.getRegionY(), old.getPlane(), old.getOccurrence(),
-					objectId, orientation, old.getStackIndex(), animationId, heightOffset, offsetX, offsetY, npcId, scale, roam, mirror, tintArgb);
+				InstancedObject updated = lightEdit
+					? new InstancedObject(old.getRegionId(), old.getRegionX(), old.getRegionY(), old.getPlane(), old.getOccurrence(),
+						-1, orientation, old.getStackIndex(), -1, heightOffset, offsetX, offsetY, -1, scale, false, false, 0, lightPreset)
+					: new InstancedObject(old.getRegionId(), old.getRegionX(), old.getRegionY(), old.getPlane(), old.getOccurrence(),
+						objectId, orientation, old.getStackIndex(), animationId, heightOffset, offsetX, offsetY, npcId, scale, roam, mirror, tintArgb, 0);
 				if (old.sameDecoration(updated))
 				{
 					return;
@@ -1576,6 +1664,25 @@ public class MapDecoratorPlugin extends Plugin
 
 	private void spawnObject(WorldView wv, PlacedObject obj, LocalPoint fallbackLp)
 	{
+		if (isLight(obj.getObjectId(), obj.getNpcId()))
+		{
+			clientThread.invoke(() ->
+			{
+				LocalPoint base = LocalPoint.fromWorld(wv, obj.toWorldPoint());
+				if (base == null)
+				{
+					base = fallbackLp;
+				}
+				if (base != null)
+				{
+					LocalPoint lp = new LocalPoint(base.getX() + obj.getOffsetX(), base.getY() + obj.getOffsetY(), base.getWorldView());
+					RuneLiteObject carrier = createLightCarrier(lp, obj.getPlane(), obj.getHeightOffset());
+					activeObjects.put(obj, carrier);
+					lightAnchors.put(carrier, LightAnchors.Spec.of(obj.getLightPreset(), obj.getScale()));
+				}
+			});
+			return;
+		}
 		withDecorationModel(obj.getObjectId(), obj.getNpcId(), obj.getScale(), obj.isMirror(), obj.getTintArgb(), null, md ->
 		{
 			if (md == null)
@@ -1628,6 +1735,7 @@ public class MapDecoratorPlugin extends Plugin
 			activeInstancedObjects.clear();
 			instancedLoaded = false;
 			instancedLoadFailed = false;
+			instancedBackedUp = false;
 		});
 	}
 
@@ -1643,6 +1751,13 @@ public class MapDecoratorPlugin extends Plugin
 
 	private void saveObjectsToRegionConfig(int regionId, List<PlacedObject> objects)
 	{
+		// What is in memory for this region is missing whatever could not be read, so saving it
+		// would replace the unreadable data with an incomplete list for good
+		if (unreadableRegions.contains(regionId))
+		{
+			log.warn("Not saving region {}: its saved decorations could not be read", regionId);
+			return;
+		}
 		if (objects.isEmpty())
 		{
 			configManager.unsetConfiguration(CONFIG_GROUP, REGION_PREFIX + regionId);
@@ -1668,6 +1783,7 @@ public class MapDecoratorPlugin extends Plugin
 		catch (Exception e)
 		{
 			log.warn("Failed to load placed objects for region {}", regionId, e);
+			unreadableRegions.add(regionId);
 			return Collections.emptyList();
 		}
 	}
@@ -1851,7 +1967,8 @@ public class MapDecoratorPlugin extends Plugin
 		}
 		return new PlacedObject(obj.getRegionId(), obj.getRegionX(), obj.getRegionY(), obj.getPlane(),
 			obj.getObjectId(), obj.getOrientation(), obj.getStackIndex(), obj.getAnimationId(), obj.getHeightOffset(),
-			obj.getOffsetX(), obj.getOffsetY(), obj.getNpcId(), clamped, obj.isRoam(), obj.isMirror(), obj.getTintArgb());
+			obj.getOffsetX(), obj.getOffsetY(), obj.getNpcId(), clamped, obj.isRoam(), obj.isMirror(), obj.getTintArgb(),
+			obj.getLightPreset());
 	}
 
 	/** See the PlacedObject overload. */
@@ -1864,7 +1981,8 @@ public class MapDecoratorPlugin extends Plugin
 		}
 		return new InstancedObject(obj.getRegionId(), obj.getRegionX(), obj.getRegionY(), obj.getPlane(), obj.getOccurrence(),
 			obj.getObjectId(), obj.getOrientation(), obj.getStackIndex(), obj.getAnimationId(), obj.getHeightOffset(),
-			obj.getOffsetX(), obj.getOffsetY(), obj.getNpcId(), clamped, obj.isRoam(), obj.isMirror(), obj.getTintArgb());
+			obj.getOffsetX(), obj.getOffsetY(), obj.getNpcId(), clamped, obj.isRoam(), obj.isMirror(), obj.getTintArgb(),
+			obj.getLightPreset());
 	}
 
 	private void importOverworld(JsonArray array, String code)
@@ -1922,7 +2040,7 @@ public class MapDecoratorPlugin extends Plugin
 				{
 					stackIndex++;
 				}
-				if (stackIndex >= 3)
+				if (stackIndex >= MAX_PER_TILE)
 				{
 					skipped++;
 					continue;
@@ -2034,7 +2152,7 @@ public class MapDecoratorPlugin extends Plugin
 				{
 					stackIndex++;
 				}
-				if (stackIndex >= 3)
+				if (stackIndex >= MAX_PER_TILE)
 				{
 					skipped++;
 					continue;
@@ -2070,33 +2188,35 @@ public class MapDecoratorPlugin extends Plugin
 
 	// ── Instanced region (POH) support ───────────────────────────────────
 
-	private void placeInstancedObject(Tile tile, Point clickPos)
+	private void placeInstancedObject(Tile tile, Point clickPos, boolean lightOnly)
 	{
 		// Snapshotted for the same reason as placeObject's - the load below may defer this.
-		int objectId = panel.getSelectedObjectId();
-		int npcId = panel.getSelectedNpcId();
+		// A light is its own decoration with no model; an object never carries a light
+		int objectId = lightOnly ? -1 : panel.getSelectedObjectId();
+		int npcId = lightOnly ? -1 : panel.getSelectedNpcId();
 		int scale = panel.getSelectedScale();
-		int animationId = panel.getSelectedAnimationId();
+		int animationId = lightOnly ? -1 : panel.getSelectedAnimationId();
 		int heightOffset = panel.getSelectedHeightOffset();
-		boolean roam = panel.getSelectedRoam();
-		int tintArgb = panel.getSelectedTintArgb();
+		boolean roam = !lightOnly && panel.getSelectedRoam();
+		int tintArgb = lightOnly ? 0 : panel.getSelectedTintArgb();
+		int lightPreset = lightOnly ? panel.getSelectedLightPreset() : 0;
 
 		int rawOffsetX = panel.getSelectedOffsetX();
 		int rawOffsetY = panel.getSelectedOffsetY();
 		int panelOrientation = panel.getSelectedOrientation();
-		boolean panelMirror = panel.getSelectedMirror();
+		boolean panelMirror = !lightOnly && panel.getSelectedMirror();
 
 		// See placeObject's matching check for why this must happen before persisting.
 		withDecorationModel(objectId, npcId, scale, panelMirror, tintArgb, null, md ->
 		{
-			if (md == null)
+			if (md == null && !lightOnly)
 			{
 				log.debug("No model for object id {} / npc id {}, not placing", objectId, npcId);
 				return;
 			}
 			InstancedIdentity id = resolveInstancedIdentity(tile);
 			List<InstancedObject> atTile = findAllAtInstancedTile(id.stable.getRegionID(), id.stable.getRegionX(), id.stable.getRegionY(), id.stable.getPlane(), id.occurrence);
-			if (atTile.size() >= 3)
+			if (atTile.size() >= MAX_PER_TILE)
 			{
 				return;
 			}
@@ -2137,7 +2257,7 @@ public class MapDecoratorPlugin extends Plugin
 				animationId,
 				heightOffset, offsetX, offsetY,
 				npcId, scale, roam,
-				mirror, tintArgb);
+				mirror, tintArgb, lightPreset);
 
 			activeInstancedObjects.put(obj, null);
 			spawnInstancedObject(obj);
@@ -2216,22 +2336,22 @@ public class MapDecoratorPlugin extends Plugin
 		{
 			return;
 		}
-		WorldView wv = client.getTopLevelWorldView();
 		Player player = client.getLocalPlayer();
-		if (wv == null || player == null)
+		if (player == null)
 		{
 			return;
 		}
 		int playerPlane = player.getWorldLocation().getPlane();
-		for (Map.Entry<InstancedObject, RuneLiteObject> entry : activeInstancedObjects.entrySet())
+		for (RuneLiteObject rlo : activeInstancedObjects.values())
 		{
-			RuneLiteObject rlo = entry.getValue();
-			if (rlo == null)
+			// Light carriers have no model and must never be activated
+			if (rlo == null || rlo.getModel() == null)
 			{
 				continue;
 			}
-			WorldPoint liveWp = resolveLiveInstancedPoint(entry.getKey(), wv);
-			boolean shouldShow = liveWp != null && liveWp.getPlane() == playerPlane;
+			// The level was resolved from the room at spawn, and rooms only move on a scene
+			// rebuild, which respawns everything; no need to look the room up again every tick
+			boolean shouldShow = rlo.getLevel() == playerPlane;
 			if (rlo.isActive() != shouldShow)
 			{
 				rlo.setActive(shouldShow);
@@ -2252,6 +2372,23 @@ public class MapDecoratorPlugin extends Plugin
 
 	private void spawnInstancedObject(InstancedObject obj)
 	{
+		if (isLight(obj.getObjectId(), obj.getNpcId()))
+		{
+			clientThread.invoke(() ->
+			{
+				WorldView wv = client.getTopLevelWorldView();
+				WorldPoint liveWp = wv == null ? null : resolveLiveInstancedPoint(obj, wv);
+				LocalPoint base = liveWp == null ? null : LocalPoint.fromWorld(wv, liveWp);
+				if (base != null)
+				{
+					LocalPoint lp = new LocalPoint(base.getX() + obj.getOffsetX(), base.getY() + obj.getOffsetY(), base.getWorldView());
+					RuneLiteObject carrier = createLightCarrier(lp, liveWp.getPlane(), obj.getHeightOffset());
+					activeInstancedObjects.put(obj, carrier);
+					lightAnchors.put(carrier, LightAnchors.Spec.of(obj.getLightPreset(), obj.getScale()));
+				}
+			});
+			return;
+		}
 		withDecorationModel(obj.getObjectId(), obj.getNpcId(), obj.getScale(), obj.isMirror(), obj.getTintArgb(), null, md ->
 		{
 			WorldView wv = client.getTopLevelWorldView();
@@ -2410,11 +2547,69 @@ public class MapDecoratorPlugin extends Plugin
 				o.has("scale") ? o.get("scale").getAsInt() : 0,
 				o.has("roam") && o.get("roam").getAsBoolean(),
 				o.has("mirror") && o.get("mirror").getAsBoolean(),
-				o.has("tintArgb") ? o.get("tintArgb").getAsInt() : 0
+				o.has("tintArgb") ? o.get("tintArgb").getAsInt() : 0,
+				0
 			));
 		}
 		log.info("Migrated {} POH decorations to stable room coordinates", result.size());
 		return result;
+	}
+
+	/** True inside a loaded house that has a backup to restore. */
+	boolean hasHouseBackup()
+	{
+		long accountHash = client.getAccountHash();
+		if (!instancedLoaded || accountHash <= 0)
+		{
+			return false;
+		}
+		String backup = configManager.getConfiguration(CONFIG_GROUP, "instance_" + accountHash + BACKUP_SUFFIX);
+		return backup != null && !backup.isEmpty();
+	}
+
+	/** Replaces the house with its backup, as one undoable action. */
+	void restoreHouseBackup()
+	{
+		clientThread.invoke(() ->
+		{
+			long accountHash = client.getAccountHash();
+			if (!instancedLoaded || accountHash <= 0)
+			{
+				return;
+			}
+			String json = configManager.getConfiguration(CONFIG_GROUP, "instance_" + accountHash + BACKUP_SUFFIX);
+			List<InstancedObject> backup;
+			try
+			{
+				backup = json == null ? null : gson.fromJson(json, INSTANCED_OBJECT_LIST);
+			}
+			catch (Exception e)
+			{
+				log.warn("Failed to read house backup", e);
+				return;
+			}
+			if (backup == null)
+			{
+				return;
+			}
+			if (isEditing())
+			{
+				endEdit();
+			}
+			List<InstancedObject> before = new ArrayList<>(activeInstancedObjects.keySet());
+			for (RuneLiteObject rlo : activeInstancedObjects.values())
+			{
+				despawn(rlo);
+			}
+			activeInstancedObjects.clear();
+			for (InstancedObject obj : backup)
+			{
+				activeInstancedObjects.put(obj, null);
+				spawnInstancedObject(obj);
+			}
+			saveInstancedObjects();
+			recordInstancedAction(before, backup);
+		});
 	}
 
 	void clearArea()
@@ -2482,6 +2677,15 @@ public class MapDecoratorPlugin extends Plugin
 		}
 		List<InstancedObject> list = new ArrayList<>(activeInstancedObjects.keySet());
 		String key = "instance_" + accountHash;
+		if (!instancedBackedUp)
+		{
+			String stored = configManager.getConfiguration(CONFIG_GROUP, key);
+			if (stored != null && !stored.isEmpty())
+			{
+				configManager.setConfiguration(CONFIG_GROUP, key + BACKUP_SUFFIX, stored);
+			}
+			instancedBackedUp = true;
+		}
 		if (list.isEmpty())
 		{
 			configManager.unsetConfiguration(CONFIG_GROUP, key);

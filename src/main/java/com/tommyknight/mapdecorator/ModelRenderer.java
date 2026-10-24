@@ -151,7 +151,6 @@ class ModelRenderer
 		float cosY = (float) Math.cos(yaw);
 		float sinY = (float) Math.sin(yaw);
 
-		// Project all vertices
 		int n = s.vx.length;
 		float[] sx = new float[n];
 		float[] sy = new float[n];
@@ -162,12 +161,10 @@ class ModelRenderer
 
 		for (int i = 0; i < n; i++)
 		{
-			// Y-axis rotation (yaw)
 			float rx = s.vx[i] * cosY + s.vz[i] * sinY;
 			float ry = s.vy[i];
 			float rz = -s.vx[i] * sinY + s.vz[i] * cosY;
 
-			// X-axis rotation (pitch)
 			float rx2 = rx;
 			float ry2 = ry * cosPitch - rz * sinPitch;
 			float rz2 = ry * sinPitch + rz * cosPitch;

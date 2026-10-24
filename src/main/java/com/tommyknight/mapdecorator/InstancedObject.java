@@ -52,6 +52,8 @@ class InstancedObject
 	boolean mirror;
 	/** Tint colour with alpha as strength; alpha 0 = no tint. Absent in pre-1.2 saves (defaults to 0). */
 	int tintArgb;
+	/** Spotanim id of the 117 HD light this decoration is ({@link LightPreset}); 0 = not a light. Absent in pre-1.3 saves (defaults to 0). */
+	int lightPreset;
 
 	WorldPoint toWorldPoint()
 	{
@@ -61,7 +63,7 @@ class InstancedObject
 	InstancedObject withStackIndex(int newStackIndex)
 	{
 		return new InstancedObject(regionId, regionX, regionY, plane, occurrence, objectId, orientation,
-			newStackIndex, animationId, heightOffset, offsetX, offsetY, npcId, scale, roam, mirror, tintArgb);
+			newStackIndex, animationId, heightOffset, offsetX, offsetY, npcId, scale, roam, mirror, tintArgb, lightPreset);
 	}
 
 	/** True if this and other would look identical if placed (ignores stack slot, which is just where they sit). */
@@ -77,6 +79,7 @@ class InstancedObject
 			&& scale == other.scale
 			&& roam == other.roam
 			&& mirror == other.mirror
-			&& tintArgb == other.tintArgb;
+			&& tintArgb == other.tintArgb
+			&& lightPreset == other.lightPreset;
 	}
 }

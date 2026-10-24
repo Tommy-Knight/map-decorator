@@ -20,4 +20,5 @@ class PanelSelection
 	boolean roam;
 	boolean mirror;
 	int tintArgb;
+	int lightPreset;
 }

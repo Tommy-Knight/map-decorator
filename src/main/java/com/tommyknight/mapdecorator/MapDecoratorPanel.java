@@ -12,6 +12,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridLayout;
 import java.awt.Insets;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
@@ -21,6 +22,7 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,13 +38,17 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JColorChooser;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFormattedTextField;
-import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JMenuItem;
@@ -54,7 +60,6 @@ import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
-import java.awt.Rectangle;
 import javax.swing.Scrollable;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
@@ -109,6 +114,8 @@ class MapDecoratorPanel extends PluginPanel
 	private volatile boolean selectedMirror = false;
 	// Tint colour with alpha as strength; alpha 0 = no tint (default)
 	private volatile int selectedTintArgb = 0x00C83C3C;
+	private volatile int selectedLightPreset = 0;
+	private JComboBox<LightPreset> lightCombo;
 	// Set while the animation-selector is programmatically switching the Object box to a paired
 	// model, so that sync doesn't immediately trip the "object changed" auto-clear below.
 	private volatile boolean suppressAnimationClear = false;
@@ -276,6 +283,28 @@ class MapDecoratorPanel extends PluginPanel
 		npcInput.add(npcSpinner, BorderLayout.CENTER);
 		JPanel npcRow = createFormRow("NPC", npcInput);
 
+		// Light - a standalone glow drawn by the 117 HD plugin, placed with its own "Place Light"
+		// menu option; does nothing without 117 HD. Each entry is one of 117 HD's own projectile
+		// lights, so colour and reach (tiles, in brackets) are fixed. Height and Offset move it;
+		// Scale above 0 stacks copies for brightness.
+		lightCombo = new JComboBox<>(LightPreset.all().toArray(new LightPreset[0]));
+		lightCombo.setMaximumRowCount(20);
+		lightCombo.setPreferredSize(new Dimension(150, 24));
+		lightCombo.setRenderer(new DefaultListCellRenderer()
+		{
+			@Override
+			public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus)
+			{
+				JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+				LightPreset preset = (LightPreset) value;
+				label.setIcon(preset == null || preset == LightPreset.NONE ? null : lightSwatch(preset.getRgb()));
+				return label;
+			}
+		});
+		lightCombo.setToolTipText("Pick a glow, then shift+right-click a tile and Place Light. Needs the 117 HD plugin");
+		lightCombo.addActionListener(e -> onLightChanged());
+		JPanel lightRow = createFormRow("Light", lightCombo);
+
 		// Offset - sub-tile position nudge, so objects can sit between tiles or against an edge
 		offsetXSpinner = new JSpinner(new SpinnerNumberModel(0, -64, 64, 1));
 		offsetXSpinner.setPreferredSize(new Dimension(70, 24));
@@ -372,9 +401,9 @@ class MapDecoratorPanel extends PluginPanel
 			facingButtons.add(btn);
 		}
 
-		// Mirror (prototype) - flips the model across its vertical axis
+		// Mirror - flips the model across its vertical axis
 		mirrorChk = new JCheckBox("Mirror");
-		mirrorChk.setToolTipText("Flip the object left-to-right (prototype)");
+		mirrorChk.setToolTipText("Flip the object left-to-right");
 		mirrorChk.setForeground(Color.WHITE);
 		mirrorChk.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		mirrorChk.setFont(FontManager.getRunescapeSmallFont());
@@ -385,7 +414,7 @@ class MapDecoratorPanel extends PluginPanel
 			applyEditIfActive();
 		});
 
-		// Tint (prototype) - a colour swatch; the picker's opacity is the tint strength, 0 = off
+		// Tint - a colour swatch; the picker's opacity is the tint strength, 0 = off
 		JLabel tintLabel = new JLabel("Tint");
 		tintLabel.setForeground(Color.WHITE);
 		tintLabel.setFont(FontManager.getRunescapeSmallFont());
@@ -412,7 +441,6 @@ class MapDecoratorPanel extends PluginPanel
 		tintCell.add(tintSwatch);
 		tintCell.add(tintLabel);
 
-		// Cursor ghost / Hide UI checkboxes
 		JCheckBox ghostToggle = new JCheckBox("Cursor ghost");
 		ghostToggle.setToolTipText("Show a ghost of your selection on the tile under the cursor");
 		ghostToggle.setForeground(Color.WHITE);
@@ -497,7 +525,6 @@ class MapDecoratorPanel extends PluginPanel
 			setGeometryControlsEnabled(!enabled);
 		});
 
-		// Left column: Tint, Cursor ghost, Be Object, Snap - right column: Mirror, Random, Hide UI, Hide Menu
 		// Random sits under Mirror because it overrides it; the two Hide toggles pair at the bottom.
 		JPanel togglesGrid = new JPanel(new GridLayout(4, 2, 6, 2));
 		togglesGrid.setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -512,7 +539,6 @@ class MapDecoratorPanel extends PluginPanel
 		togglesGrid.add(snapChk);
 		togglesGrid.add(hideMenuChk);
 
-		// Favourites section
 		favsRows = new JPanel();
 		favsRows.setLayout(new BoxLayout(favsRows, BoxLayout.Y_AXIS));
 		favsRows.setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -560,7 +586,8 @@ class MapDecoratorPanel extends PluginPanel
 			}
 		});
 
-		// Saves section (named export/import codes, kept for later)
+		// Layouts section (named export/import codes, kept for later). The fields keep the
+		// older "saves" name because the config keys they persist to do.
 		savesRows = new JPanel();
 		savesRows.setLayout(new BoxLayout(savesRows, BoxLayout.Y_AXIS));
 		savesRows.setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -582,6 +609,8 @@ class MapDecoratorPanel extends PluginPanel
 		controls.add(animRow);
 		controls.add(Box.createVerticalStrut(4));
 		controls.add(npcRow);
+		controls.add(Box.createVerticalStrut(4));
+		controls.add(lightRow);
 		controls.add(Box.createVerticalStrut(4));
 		controls.add(offsetXRow);
 		controls.add(Box.createVerticalStrut(4));
@@ -664,6 +693,32 @@ class MapDecoratorPanel extends PluginPanel
 		{
 			if (plugin == null)
 			{
+				return;
+			}
+			if (plugin.hasHouseBackup())
+			{
+				// The backup is the house as it was before the most recent visit that changed it
+				Object[] options = {"Clear Area", "Restore Backup", "Cancel"};
+				int result = JOptionPane.showOptionDialog(
+					this,
+					"Remove all placed objects in the house?\n\n"
+						+ "Restore Backup puts your house back as it was before\n"
+						+ "your most recent visit that changed it. Both can be undone.",
+					"Clear Area",
+					JOptionPane.YES_NO_CANCEL_OPTION,
+					JOptionPane.WARNING_MESSAGE,
+					null,
+					options,
+					options[2]
+				);
+				if (result == 0)
+				{
+					plugin.clearArea();
+				}
+				else if (result == 1)
+				{
+					plugin.restoreHouseBackup();
+				}
 				return;
 			}
 			int result = JOptionPane.showConfirmDialog(
@@ -1254,6 +1309,28 @@ class MapDecoratorPanel extends PluginPanel
 		applyTintSwatch(tintSwatch);
 	}
 
+	int getSelectedLightPreset()
+	{
+		return selectedLightPreset;
+	}
+
+	void setLight(int presetCode)
+	{
+		lightCombo.setSelectedItem(LightPreset.fromCode(presetCode));
+	}
+
+	private static Icon lightSwatch(int rgb)
+	{
+		BufferedImage img = new BufferedImage(12, 12, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g = img.createGraphics();
+		g.setColor(new Color(rgb));
+		g.fillRect(0, 0, 12, 12);
+		g.setColor(Color.BLACK);
+		g.drawRect(0, 0, 11, 11);
+		g.dispose();
+		return new ImageIcon(img);
+	}
+
 	boolean getSelectedRoam()
 	{
 		return selectedRoam;
@@ -1270,7 +1347,7 @@ class MapDecoratorPanel extends PluginPanel
 	{
 		return new PanelSelection(selectedObjectId, selectedNpcId, selectedAnimationId, selectedOrientation,
 			selectedHeightOffset, selectedOffsetX, selectedOffsetY, selectedScale, selectedRoam,
-			selectedMirror, selectedTintArgb);
+			selectedMirror, selectedTintArgb, selectedLightPreset);
 	}
 
 	/** Restores a selection snapshot, same ordering rules as favourite/edit loads. */
@@ -1289,6 +1366,7 @@ class MapDecoratorPanel extends PluginPanel
 		setRoam(sel.isRoam());
 		setMirror(sel.isMirror());
 		setTintArgb(sel.getTintArgb());
+		setLight(sel.getLightPreset());
 		refreshPreviewAndGhost();
 	}
 
@@ -1357,7 +1435,8 @@ class MapDecoratorPanel extends PluginPanel
 			PanelSelection before = snapshotSelection();
 			applySelection(new PanelSelection(fav.getObjectId(), fav.getNpcId(), fav.getAnimationId(),
 				fav.getOrientation(), fav.getHeightOffset(), fav.getOffsetX(), fav.getOffsetY(),
-				fav.getScale(), fav.isRoam(), fav.isMirror(), fav.getTintArgb()));
+				fav.getScale(), fav.isRoam(), fav.isMirror(), fav.getTintArgb(),
+				fav.getLightPreset()));
 			PanelSelection after = snapshotSelection();
 			if (!after.equals(before))
 			{
@@ -1396,7 +1475,7 @@ class MapDecoratorPanel extends PluginPanel
 		// The full recipe, so a tuned decoration (height, nudge, size and all) is one click away
 		Favourite fav = new Favourite(id, name.trim(), selectedAnimationId, selectedNpcId,
 			selectedOrientation, selectedHeightOffset, selectedOffsetX, selectedOffsetY, selectedScale, selectedRoam,
-			selectedMirror, selectedTintArgb);
+			selectedMirror, selectedTintArgb, selectedLightPreset);
 		plugin.setFavourite(slot, fav);
 		applyFavToButton(slotButtons.get(slot), fav);
 		updateFavCount();
@@ -1501,6 +1580,11 @@ class MapDecoratorPanel extends PluginPanel
 
 	private void updateEditLabel()
 	{
+		if (selectedLightPreset != 0 && selectedObjectId < 0 && selectedNpcId <= 0)
+		{
+			editLabel.setText("Editing: Light - " + LightPreset.fromCode(selectedLightPreset).getLabel());
+			return;
+		}
 		String name = selectedNpcId > 0 ? NpcNames.name(selectedNpcId) : ObjectModelNames.name(selectedObjectId);
 		int id = selectedNpcId > 0 ? selectedNpcId : selectedObjectId;
 		editLabel.setText("Editing: " + (name != null ? name : "#" + id));
@@ -1522,11 +1606,51 @@ class MapDecoratorPanel extends PluginPanel
 
 	// ── Object / Animation change ────────────────────────────────────────
 
+	/** A light replaces the object, npc and animation, the same way an npc replaces the object. */
+	private void onLightChanged()
+	{
+		selectedLightPreset = ((LightPreset) lightCombo.getSelectedItem()).getCode();
+		if (selectedLightPreset != 0)
+		{
+			suppressAnimationClear = true;
+			if (selectedAnimationId > 0)
+			{
+				animationSpinner.setValue(-1);
+			}
+			if (selectedNpcId > 0)
+			{
+				npcSpinner.setValue(-1);
+			}
+			if (selectedObjectId >= 0)
+			{
+				objectIdSpinner.setValue(-1);
+			}
+			suppressAnimationClear = false;
+		}
+		refreshPreviewAndGhost();
+		if (editing)
+		{
+			updateEditLabel();
+		}
+		applyEditIfActive();
+	}
+
+	/** Picking an object or npc drops the light selection. */
+	private void clearLightSelection()
+	{
+		if (selectedLightPreset != 0)
+		{
+			selectedLightPreset = 0;
+			lightCombo.setSelectedItem(LightPreset.NONE);
+		}
+	}
+
 	private void onNpcChanged()
 	{
 		selectedNpcId = (Integer) npcSpinner.getValue();
 		if (selectedNpcId > 0)
 		{
+			clearLightSelection();
 			// The npc replaces both: it brings its own idle animation, and the Object box
 			// goes to "none" so it's obvious the npc is what will be placed.
 			suppressAnimationClear = true;
@@ -1578,6 +1702,10 @@ class MapDecoratorPanel extends PluginPanel
 	private void onObjectIdChanged()
 	{
 		selectedObjectId = (Integer) objectIdSpinner.getValue();
+		if (selectedObjectId >= 0)
+		{
+			clearLightSelection();
+		}
 		// Manually picking a different object no longer matches whatever animation or npc was
 		// selected (unless this change came from the animation auto-pairing itself, above).
 		if (!suppressAnimationClear && selectedAnimationId > 0)

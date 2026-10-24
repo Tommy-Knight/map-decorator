@@ -5,7 +5,7 @@ import lombok.Value;
 import net.runelite.api.coords.WorldPoint;
 
 /**
- * A single user-placed object. Up to 3 may share the same tile, distinguished by stackIndex.
+ * A single user-placed object. Up to {@link MapDecoratorPlugin#MAX_PER_TILE} may share the same tile, distinguished by stackIndex.
  */
 @Value
 @EqualsAndHashCode(of = {"regionId", "regionX", "regionY", "plane", "stackIndex"})
@@ -18,7 +18,7 @@ class PlacedObject
 	int objectId;
 	/** RuneLiteObject orientation. S=0, W=512, N=1024, E=1536. */
 	int orientation;
-	/** Stack slot on this tile: 0 = first placed, 1 = second, 2 = third. */
+	/** Stack slot on this tile: 0 = first placed, 1 = second, and so on. */
 	int stackIndex;
 	/** Looping animation sequence id; <= 0 means none. Absent in pre-1.1 saves (defaults to 0). */
 	int animationId;
@@ -38,6 +38,8 @@ class PlacedObject
 	boolean mirror;
 	/** Tint colour with alpha as strength; alpha 0 = no tint. Absent in pre-1.2 saves (defaults to 0). */
 	int tintArgb;
+	/** Spotanim id of the 117 HD light this decoration is ({@link LightPreset}); 0 = not a light. Absent in pre-1.3 saves (defaults to 0). */
+	int lightPreset;
 
 	WorldPoint toWorldPoint()
 	{
@@ -46,7 +48,7 @@ class PlacedObject
 
 	PlacedObject withStackIndex(int newStackIndex)
 	{
-		return new PlacedObject(regionId, regionX, regionY, plane, objectId, orientation, newStackIndex, animationId, heightOffset, offsetX, offsetY, npcId, scale, roam, mirror, tintArgb);
+		return new PlacedObject(regionId, regionX, regionY, plane, objectId, orientation, newStackIndex, animationId, heightOffset, offsetX, offsetY, npcId, scale, roam, mirror, tintArgb, lightPreset);
 	}
 
 	/** True if this and other would look identical if placed (ignores stack slot, which is just where they sit). */
@@ -62,6 +64,7 @@ class PlacedObject
 			&& scale == other.scale
 			&& roam == other.roam
 			&& mirror == other.mirror
-			&& tintArgb == other.tintArgb;
+			&& tintArgb == other.tintArgb
+			&& lightPreset == other.lightPreset;
 	}
 }
